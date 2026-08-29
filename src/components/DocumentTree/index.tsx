@@ -1,11 +1,11 @@
-/**
- * 文档树组件
- * - 左侧文件夹树（categoryService.tree()），支持展开/选中
+﻿/**
+ * 文档树组件（统一文件树：文件夹 + 文件 合并显示）
+ * - 左侧统一 Tree：文件夹节点可展开，展开后同时显示子文件夹和该文件夹下的文档
+ * - 文档节点为叶子节点，点击加载编辑器；文件夹节点点击记录为当前操作目录
  * - 顶部工具栏：新建文件夹 / 新建文档 / 导入 Markdown / 导出全部 / 刷新
- * - 文件夹右键菜单：重命名 / 删除 / 新建子文件夹 / 新建文档
- * - 选中文件夹后展示其下文档列表，点击文档回调父级加载编辑器
+ * - 文件夹右键菜单 / 更多按钮：重命名 / 删除 / 新建子文件夹 / 新建文档
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { ReactElement } from 'react'
 import {
   Tree,
@@ -18,7 +18,6 @@ import {
   message,
   Dropdown,
   Space,
-  List,
   Spin,
   Typography,
   Empty,
@@ -32,6 +31,7 @@ import {
   ExportOutlined,
   ReloadOutlined,
   FolderOutlined,
+  FolderOpenOutlined,
   MoreOutlined,
   FileTextOutlined,
 } from '@ant-design/icons'
@@ -57,14 +57,19 @@ interface FolderOption {
   label: string
 }
 
-/** 将文件夹树转为 antd Tree 节点 */
-function toTreeData(nodes: Category[]): TreeDataNode[] {
-  return nodes.map((node) => ({
-    key: node._id,
-    title: node.name,
-    children: node.children?.length ? toTreeData(node.children) : undefined,
-  }))
-}
+/** 文章节点 key 前缀，用于与文件夹 id 区分 */
+const ARTICLE_KEY_PREFIX = 'art_'
+
+/** 将文章 id 转为树节点 key */
+const articleKey = (id: string) => `${ARTICLE_KEY_PREFIX}${id}`
+
+/** 判断一个 key 是否为文章节点 */
+const isArticleKey = (key: React.Key) =>
+  typeof key === 'string' && key.startsWith(ARTICLE_KEY_PREFIX)
+
+/** 从文章节点 key 中提取文章 id */
+const extractArticleId = (key: React.Key) =>
+  typeof key === 'string' ? key.slice(ARTICLE_KEY_PREFIX.length) : ''
 
 /** 扁平化文件夹树为下拉选项 */
 function flattenFolders(nodes: Category[], depth = 0, acc: FolderOption[] = []): FolderOption[] {
@@ -87,15 +92,60 @@ function findFolder(nodes: Category[], id: string): Category | undefined {
   return undefined
 }
 
+/** 递归收集所有文件夹 id（用于遍历） */
+function collectFolderIds(nodes: Category[], acc: string[] = []): string[] {
+  nodes.forEach((n) => {
+    acc.push(n._id)
+    if (n.children?.length) collectFolderIds(n.children, acc)
+  })
+  return acc
+}
+
+/** 将（文件夹树 + 文章）转为 antd Tree 节点（纯函数，放到组件外以避免递归自引用的 hooks immutability 警告）
+ *  每个文件夹节点的 children = [子文件夹...] + [该文件夹下的文章叶子节点...]
+ */
+function toTreeData(
+  nodes: Category[],
+  articlesByFolder: Map<string, Article[]>,
+): TreeDataNode[] {
+  return nodes.map((folder) => {
+    const subFolders = folder.children?.length ? toTreeData(folder.children, articlesByFolder) : []
+    const articles = articlesByFolder.get(folder._id) ?? []
+    const articleNodes: TreeDataNode[] = articles.map((a) => ({
+      key: articleKey(a._id),
+      title: a.title,
+      isLeaf: true,
+    }))
+    return {
+      key: folder._id,
+      title: folder.name,
+      children: [...subFolders, ...articleNodes],
+    }
+  })
+}
+
 export default function DocumentTree(props: DocumentTreeProps): ReactElement {
   const { selectedArticleId, onSelectArticle, refreshKey } = props
 
   const [tree, setTree] = useState<Category[]>([])
   const [loading, setLoading] = useState(false)
   const [expandedKeys, setExpandedKeys] = useState<React.Key[]>([])
-  const [selectedFolderId, setSelectedFolderId] = useState<string | undefined>(undefined)
-  const [articles, setArticles] = useState<Article[]>([])
-  const [articlesLoading, setArticlesLoading] = useState(false)
+  const [selectedKeys, setSelectedKeys] = useState<React.Key[]>([])
+  /** 选中的文件夹 id（用于新建文档、导入 MD 等操作定位父目录） */
+  const [activeFolderId, setActiveFolderId] = useState<string | undefined>(undefined)
+
+  /** 各文件夹下的文章 Map: folderId -> Article[] */
+  const [articlesByFolder, setArticlesByFolder] = useState<Map<string, Article[]>>(new Map())
+  /** 正在加载文章的文件夹 id 集合 */
+  const [loadingFolders, setLoadingFolders] = useState<Set<string>>(new Set())
+  /** 文章快速查找表：articleId -> Article（用于点击文章节点时找到文章对象） */
+  const articleLookup = useMemo(() => {
+    const m = new Map<string, Article>()
+    articlesByFolder.forEach((list) => {
+      list.forEach((a) => m.set(a._id, a))
+    })
+    return m
+  }, [articlesByFolder])
 
   // Modal 状态
   const [folderModalOpen, setFolderModalOpen] = useState(false)
@@ -107,8 +157,7 @@ export default function DocumentTree(props: DocumentTreeProps): ReactElement {
   const [folderForm] = Form.useForm<{ name: string; parentId?: string }>()
   const [docForm] = Form.useForm<{ title: string }>()
 
-  // 是否已完成首次加载（首次默认展开第一层，后续刷新保留用户展开态）
-  const initializedRef = useRef(false)
+
 
   /** 加载文件夹树 */
   const loadTree = useCallback(async () => {
@@ -116,11 +165,7 @@ export default function DocumentTree(props: DocumentTreeProps): ReactElement {
     try {
       const data = await categoryService.tree()
       setTree(data)
-      // 仅首次加载时默认展开第一层，避免刷新覆盖用户展开态
-      if (!initializedRef.current && data.length) {
-        setExpandedKeys(data.map((n) => n._id))
-        initializedRef.current = true
-      }
+
     } catch {
       // 错误已由请求拦截器提示
     } finally {
@@ -128,45 +173,102 @@ export default function DocumentTree(props: DocumentTreeProps): ReactElement {
     }
   }, [])
 
-  /** 加载指定文件夹下文档 */
-  const loadArticles = useCallback(async (folderId: string) => {
-    setArticlesLoading(true)
+  /** 加载指定文件夹下的文章，写入 articlesByFolder */
+  const loadFolderArticles = useCallback(async (folderId: string): Promise<void> => {
+    // 已加载或正在加载则跳过
+    if (articlesByFolder.has(folderId)) return
+    if (loadingFolders.has(folderId)) return
+    setLoadingFolders((prev) => {
+      const next = new Set(prev)
+      next.add(folderId)
+      return next
+    })
     try {
-      const res = await articleService.list({ category: folderId, pageSize: 100 })
-      setArticles(res.list ?? [])
+      const res = await articleService.list({ category: folderId, pageSize: 1000 })
+      const list = res.list ?? []
+      setArticlesByFolder((prev) => {
+        const next = new Map(prev)
+        next.set(folderId, list)
+        return next
+      })
     } catch {
-      setArticles([])
+      setArticlesByFolder((prev) => {
+        const next = new Map(prev)
+        next.set(folderId, [])
+        return next
+      })
     } finally {
-      setArticlesLoading(false)
+      setLoadingFolders((prev) => {
+        const next = new Set(prev)
+        next.delete(folderId)
+        return next
+      })
     }
-  }, [])
+  }, [articlesByFolder, loadingFolders])
+
+  /** 强制刷新指定文件夹的文章列表（用于新建/导入/删除后） */
+  const reloadFolderArticles = useCallback(async (folderId: string) => {
+    // 先移除缓存，确保重新请求
+    setArticlesByFolder((prev) => {
+      const next = new Map(prev)
+      next.delete(folderId)
+      return next
+    })
+    await loadFolderArticles(folderId)
+  }, [loadFolderArticles])
 
   // 初始加载 & refreshKey 变化时重新加载
   useEffect(() => {
     loadTree()
   }, [loadTree, refreshKey])
 
-  // 选中文件夹变化时加载文档
-  useEffect(() => {
-    if (selectedFolderId) {
-      loadArticles(selectedFolderId)
-    } else {
-      setArticles([])
-    }
-  }, [selectedFolderId, loadArticles])
-
   /** 文件夹下拉选项（包含"根目录"占位） */
   const folderOptions = useMemo<FolderOption[]>(() => {
     return flattenFolders(tree)
   }, [tree])
 
-  /** 选中文件夹节点 */
+  /** antd Tree 的 onExpand：展开/折叠时对新展开的文件夹懒加载文章 */
+  const handleExpand = (keys: React.Key[]) => {
+    const expandedKeySet = new Set(expandedKeys)
+    const newlyExpanded = keys.filter((k) => !expandedKeySet.has(k))
+    setExpandedKeys(keys)
+    // 对新展开的文件夹（且类型是文件夹 key）加载文章
+    newlyExpanded.forEach((k) => {
+      if (!isArticleKey(k) && typeof k === 'string') {
+        void loadFolderArticles(k)
+      }
+    })
+  }
+
+  /** 选中树节点：文章节点 → 回调加载编辑器；文件夹节点 → 设为活跃目录 */
   const handleSelect = (keys: React.Key[]) => {
-    const id = keys[0]
-    if (typeof id === 'string') {
-      setSelectedFolderId(id)
-    } else {
-      setSelectedFolderId(undefined)
+    setSelectedKeys(keys)
+    const key = keys[0]
+    if (key === undefined || key === null) {
+      setActiveFolderId(undefined)
+      return
+    }
+    if (isArticleKey(key)) {
+      const aid = extractArticleId(key)
+      const article = articleLookup.get(aid)
+      if (article) {
+        // 选中文章时，同时把父目录设为活跃目录（方便后续新建/导入）
+        let parentFolder: string | undefined
+        articlesByFolder.forEach((list, fid) => {
+          if (list.some((a) => a._id === aid)) parentFolder = fid
+        })
+        if (parentFolder) setActiveFolderId(parentFolder)
+        onSelectArticle(article)
+      }
+    } else if (typeof key === 'string') {
+      // 文件夹节点
+      setActiveFolderId(key)
+      // 选中文件夹时顺便确保其文章加载（虽然展开时已加载，但点击选中未必展开）
+      void loadFolderArticles(key)
+      // 选中文件夹时自动展开，符合统一文件树的直觉
+      if (!expandedKeys.includes(key)) {
+        setExpandedKeys((prev) => [...prev, key])
+      }
     }
   }
 
@@ -221,7 +323,13 @@ export default function DocumentTree(props: DocumentTreeProps): ReactElement {
         try {
           await categoryService.remove(folder._id)
           message.success('文件夹已删除')
-          if (selectedFolderId === folder._id) setSelectedFolderId(undefined)
+          if (activeFolderId === folder._id) setActiveFolderId(undefined)
+          // 清理该文件夹及其子文件夹的文章缓存
+          setArticlesByFolder((prev) => {
+            const next = new Map(prev)
+            collectFolderIds([folder]).forEach((id) => next.delete(id))
+            return next
+          })
           loadTree()
         } catch {
           // 错误信息由拦截器/后端返回
@@ -232,11 +340,12 @@ export default function DocumentTree(props: DocumentTreeProps): ReactElement {
 
   /** 打开新建文档 Modal */
   const openCreateDoc = (parentId?: string) => {
-    if (!parentId && !selectedFolderId) {
+    const target = parentId ?? activeFolderId
+    if (!target) {
       message.warning('请先选择一个文件夹')
       return
     }
-    setDocParentFolder(parentId ?? selectedFolderId)
+    setDocParentFolder(target)
     docForm.resetFields()
     setDocModalOpen(true)
   }
@@ -257,8 +366,13 @@ export default function DocumentTree(props: DocumentTreeProps): ReactElement {
       })
       message.success('文档创建成功')
       setDocModalOpen(false)
-      // 刷新文档列表并选中新文档
-      loadArticles(folderId)
+      // 刷新该文件夹文章列表并选中新文档
+      await reloadFolderArticles(folderId)
+      // 确保父文件夹展开 + 选中新文章节点
+      if (!expandedKeys.includes(folderId)) {
+        setExpandedKeys((prev) => [...prev, folderId])
+      }
+      setSelectedKeys([articleKey(article._id)])
       onSelectArticle(article)
     } catch {
       // 校验失败或请求失败
@@ -271,17 +385,22 @@ export default function DocumentTree(props: DocumentTreeProps): ReactElement {
     multiple: false,
     showUploadList: false,
     beforeUpload: (file) => {
-      const folderId = selectedFolderId
+      const folderId = activeFolderId
       if (!folderId) {
         message.warning('请先选择一个文件夹再导入')
         return Upload.LIST_IGNORE
       }
-      // 异步上传
       articleService
         .importMarkdown(file, folderId)
-        .then(() => {
+        .then((art) => {
           message.success('Markdown 导入成功')
-          loadArticles(folderId)
+          void reloadFolderArticles(folderId).then(() => {
+            if (!expandedKeys.includes(folderId)) {
+              setExpandedKeys((prev) => [...prev, folderId])
+            }
+            setSelectedKeys([articleKey(art._id)])
+            onSelectArticle(art)
+          })
         })
         .catch(() => {
           // 错误已提示
@@ -327,10 +446,48 @@ export default function DocumentTree(props: DocumentTreeProps): ReactElement {
     },
   ]
 
-  /** 自定义树节点标题：文件夹名 + 操作按钮 */
+  /** 自定义树节点标题：
+   * - 文件夹节点：图标 + 名称 + 更多按钮 / 右键菜单
+   * - 文章节点：文件图标 + 标题（高亮当前选中）
+   */
   const renderTitle = (node: TreeDataNode) => {
-    const folder = findFolder(tree, String(node.key))
+    const key = node.key
+    // 文章节点
+    if (isArticleKey(key)) {
+      const aid = extractArticleId(key)
+      const article = articleLookup.get(aid)
+      const isActive = selectedArticleId === aid
+      return (
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            paddingRight: 4,
+            width: '100%',
+            overflow: 'hidden',
+          }}
+        >
+          <Space size={6} style={{ minWidth: 0, overflow: 'hidden' }}>
+            <FileTextOutlined style={{ color: '#1677ff', flexShrink: 0 }} />
+            <Typography.Text
+              ellipsis
+              style={{
+                maxWidth: 200,
+                fontWeight: isActive ? 600 : undefined,
+                color: isActive ? '#1677ff' : undefined,
+              }}
+            >
+              {article?.title ?? (node.title as string)}
+            </Typography.Text>
+          </Space>
+        </div>
+      )
+    }
+    // 文件夹节点
+    const folder = findFolder(tree, String(key))
     if (!folder) return <span>{node.title as React.ReactNode}</span>
+    // 判断此文件夹是否处于展开状态，决定图标
+    const isOpen = expandedKeys.includes(folder._id)
     return (
       <Dropdown menu={{ items: getFolderMenuItems(folder) }} trigger={['contextMenu']}>
         <div
@@ -341,9 +498,15 @@ export default function DocumentTree(props: DocumentTreeProps): ReactElement {
             paddingRight: 4,
           }}
         >
-          <Space size={4}>
-            <FolderOutlined style={{ color: '#faad14' }} />
-            <span>{folder.name}</span>
+          <Space size={4} style={{ minWidth: 0, overflow: 'hidden' }}>
+            {isOpen ? (
+              <FolderOpenOutlined style={{ color: '#faad14' }} />
+            ) : (
+              <FolderOutlined style={{ color: '#faad14' }} />
+            )}
+            <Typography.Text ellipsis style={{ maxWidth: 200 }}>
+              {folder.name}
+            </Typography.Text>
           </Space>
           <Dropdown menu={{ items: getFolderMenuItems(folder) }} trigger={['click']}>
             <Button
@@ -358,7 +521,26 @@ export default function DocumentTree(props: DocumentTreeProps): ReactElement {
     )
   }
 
-  const treeData = useMemo(() => toTreeData(tree), [tree])
+  const treeData = useMemo(() => toTreeData(tree, articlesByFolder), [tree, articlesByFolder])
+
+  // 当外部 selectedArticleId 变化（例如编辑器内删除后清空），同步选中状态
+  useEffect(() => {
+    if (selectedArticleId) {
+      const k = articleKey(selectedArticleId)
+      if (selectedKeys[0] !== k) {
+        setSelectedKeys([k])
+        // 如果该文章所在文件夹尚未展开，尝试找到并展开
+        let folderId: string | undefined
+        articlesByFolder.forEach((list, fid) => {
+          if (list.some((a) => a._id === selectedArticleId)) folderId = fid
+        })
+        if (folderId && !expandedKeys.includes(folderId)) {
+          setExpandedKeys((prev) => [...prev, folderId as string])
+        }
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedArticleId])
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
@@ -379,62 +561,36 @@ export default function DocumentTree(props: DocumentTreeProps): ReactElement {
           <Button size="small" icon={<ExportOutlined />} onClick={handleExportAll}>
             导出全部
           </Button>
-          <Button size="small" type="text" icon={<ReloadOutlined />} onClick={loadTree} />
+          <Button
+            size="small"
+            type="text"
+            icon={<ReloadOutlined />}
+            onClick={() => {
+              // 刷新文件夹树 + 清空文章缓存，下次展开重新加载
+              setArticlesByFolder(new Map())
+              setLoadingFolders(new Set())
+              loadTree()
+            }}
+          />
         </Space>
       </div>
 
-      {/* 文件夹树 */}
-      <Spin spinning={loading}>
-        {treeData.length === 0 && !loading ? (
-          <Empty description="暂无文件夹" style={{ padding: 24 }} />
-        ) : (
-          <Tree
-            treeData={treeData}
-            expandedKeys={expandedKeys}
-            onExpand={(keys) => setExpandedKeys(keys)}
-            onSelect={handleSelect}
-            selectedKeys={selectedFolderId ? [selectedFolderId] : []}
-            titleRender={renderTitle}
-            blockNode
-            style={{ userSelect: 'none' }}
-          />
-        )}
-      </Spin>
-
-      {/* 选中文件夹下的文档列表 */}
-      <div style={{ marginTop: 12, flex: 1, overflow: 'auto', borderTop: '1px solid #f0f0f0', paddingTop: 8 }}>
-        <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-          {selectedFolderId ? '文档列表' : '请选择文件夹查看文档'}
-        </Typography.Text>
-        <Spin spinning={articlesLoading}>
-          {articles.length === 0 ? (
-            <Empty description={selectedFolderId ? '暂无文档' : ''} style={{ padding: 16 }} />
+      {/* 统一文件树：文件夹 + 文件 合并显示 */}
+      <div style={{ flex: 1, overflow: 'auto' }}>
+        <Spin spinning={loading}>
+          {treeData.length === 0 && !loading ? (
+            <Empty description="暂无文件夹" style={{ padding: 24 }} />
           ) : (
-            <List
-              size="small"
-              dataSource={articles}
-              renderItem={(item) => (
-                <List.Item
-                  style={{
-                    cursor: 'pointer',
-                    padding: '6px 8px',
-                    background:
-                      selectedArticleId === item._id ? 'rgba(22, 119, 255, 0.08)' : undefined,
-                  }}
-                  onClick={() => onSelectArticle(item)}
-                >
-                  <Space size={6} style={{ width: '100%', overflow: 'hidden' }}>
-                    <FileTextOutlined style={{ color: '#1677ff' }} />
-                    <Typography.Text
-                      ellipsis
-                      style={{ flex: 1, minWidth: 0 }}
-                      strong={selectedArticleId === item._id}
-                    >
-                      {item.title}
-                    </Typography.Text>
-                  </Space>
-                </List.Item>
-              )}
+            <Tree
+              treeData={treeData}
+              expandedKeys={expandedKeys}
+              onExpand={handleExpand}
+              onSelect={handleSelect}
+              selectedKeys={selectedKeys}
+              titleRender={renderTitle}
+              blockNode
+              style={{ userSelect: 'none' }}
+              showLine={{ showLeafIcon: false }}
             />
           )}
         </Spin>
@@ -494,3 +650,4 @@ export default function DocumentTree(props: DocumentTreeProps): ReactElement {
     </div>
   )
 }
+
