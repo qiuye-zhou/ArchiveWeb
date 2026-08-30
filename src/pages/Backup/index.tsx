@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 备份管理页
  * - 立即备份（下载 zip）、上传备份恢复、删除全部
  * - 备份列表：下载 / 恢复 / 删除
@@ -27,7 +27,6 @@ import {
 import dayjs from 'dayjs'
 import { backupService } from '@/services/backup.service'
 import type { BackupItem } from '@/types'
-import { formatFileSize } from '@/utils/format'
 import { downloadBlob } from '@/utils/download'
 import Empty from '@/components/common/Empty'
 
@@ -150,7 +149,7 @@ export default function Backup() {
       dataIndex: 'size',
       key: 'size',
       width: 120,
-      render: (value: number) => formatFileSize(value),
+      render: (value: string | null | undefined) => (value == null || value === '' ? '-' : String(value)),
     },
     {
       title: '操作',
@@ -252,3 +251,5 @@ export default function Backup() {
     </div>
   )
 }
+
+
