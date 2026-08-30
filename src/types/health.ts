@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 健康检查与日志相关类型
  * 与后端 /health/* 接口契约对齐
  */
@@ -25,7 +25,7 @@ export interface HealthStatus {
 /** 日志文件项 */
 export interface LogFile {
   filename: string
-  size: number
+  size: number | string
   path?: string
   modifiedAt?: string | number
 }
@@ -35,3 +35,4 @@ export interface LogContent {
   filename: string
   content: string
 }
+
