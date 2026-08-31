@@ -25,8 +25,6 @@ import {
 } from 'antd'
 import type { TreeDataNode } from 'antd'
 import {
-  FolderAddOutlined,
-  FileAddOutlined,
   ImportOutlined,
   ExportOutlined,
   ReloadOutlined,
@@ -547,12 +545,6 @@ export default function DocumentTree(props: DocumentTreeProps): ReactElement {
       {/* 顶部工具栏 */}
       <div style={{ marginBottom: 8 }}>
         <Space size={4} wrap>
-          <Button size="small" icon={<FolderAddOutlined />} onClick={() => openCreateFolder()}>
-            新建文件夹
-          </Button>
-          <Button size="small" icon={<FileAddOutlined />} onClick={() => openCreateDoc()}>
-            新建文档
-          </Button>
           <Upload {...uploadProps}>
             <Button size="small" icon={<ImportOutlined />}>
               导入MD
