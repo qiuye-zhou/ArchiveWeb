@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 文档工作区页面
  * - 左侧 300px DocumentTree，右侧 Flex 自适应编辑区
  * - 选中文档后加载完整内容到 Milkdown 编辑器
@@ -19,7 +19,7 @@ import DocumentTree from '@/components/DocumentTree'
 import MilkdownEditor from '@/components/MilkdownEditor'
 import { articleService } from '@/services/article.service'
 import type { Article } from '@/types'
-import { formatTime } from '@/utils/format'
+import { formatTime, countWords } from '@/utils/format'
 import { downloadBlob } from '@/utils/download'
 
 const { Sider, Content } = Layout
@@ -228,7 +228,7 @@ export default function Document(): ReactElement {
               <div style={{ marginTop: 8 }}>
                 <Typography.Text type="secondary" style={{ fontSize: 12 }}>
                   创建：{formatTime(currentArticle.created)} | 更新：
-                  {formatTime(currentArticle.modified)} | 阅读量：{currentArticle.views ?? 0}
+                  {formatTime(currentArticle.modified)} | 阅读量：{currentArticle.views ?? 0} | 字数：{countWords(editorValue)}
                   {dirty ? <Typography.Text type="warning" style={{ marginLeft: 8 }}>未保存</Typography.Text> : null}
                 </Typography.Text>
               </div>
@@ -263,3 +263,4 @@ export default function Document(): ReactElement {
     </Layout>
   )
 }
+

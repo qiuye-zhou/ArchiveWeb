@@ -37,3 +37,41 @@ export function formatFileSize(bytes?: unknown): string {
   return `${size.toFixed(fractionDigits)} ${units[i]}`
 }
 
+
+/**
+ * 统计文本字数
+ * - 中文：按字符计（每个汉字/标点算 1 字）
+ * - 英文/数字：连续字母数字组合算 1 词，单个也算 1
+ * - 忽略空白字符（空格、制表符、换行）
+ * - 忽略 Markdown 语法符号（# * - > ` 等），只统计可见内容
+ *
+ * @param text 原始文本（markdown 字符串）
+ * @returns 字数
+ */
+export function countWords(text?: string | null): number {
+  if (!text) return 0
+  // 去除 markdown 语法：代码块、行内代码、链接、图片、标题符号、列表符号、引用、粗体斜体删除线、水平线
+  let cleaned = text
+    // 代码块 ```...```
+    .replace(/```[\s\S]*?```/g, '')
+    // 行内代码 `...`
+    .replace(/`[^`]*`/g, '')
+    // 图片 ![alt](url) 和 链接 [text](url) -> 保留 text
+    .replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1')
+    .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
+    // 标题符号 #
+    .replace(/^#{1,6}\s+/gm, '')
+    // 列表符号 - * + 数字.
+    .replace(/^[\s]*([-*+]|\d+\.)\s+/gm, '')
+    // 引用符号 >
+    .replace(/^>\s?/gm, '')
+    // 粗体/斜体/删除线标记 ** * __ _ ~~
+    .replace(/(\*\*|__|\*|_|~~)/g, '')
+    // 水平线 --- *** ___
+    .replace(/^[-*_]{3,}$/gm, '')
+    // 表格分隔线 |---|
+    .replace(/^\|?[\s:|-]+\|?$/gm, '')
+
+  // 去除所有空白后统计字符数（中英文混排时每个非空白字符算 1 字）
+  return cleaned.replace(/\s/g, '').length
+}
