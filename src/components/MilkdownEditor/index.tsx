@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Milkdown 富文本编辑器组件
  * - 基于 @milkdown/react 的 MilkdownProvider + useEditor
  * - 集成 commonmark / gfm / history / clipboard / emoji / prism / listener / upload / block 插件
@@ -57,6 +57,7 @@ import { block } from '@milkdown/plugin-block'
 import { nord } from '@milkdown/theme-nord'
 import { replaceAll } from '@milkdown/utils'
 import '@milkdown/theme-nord/style.css'
+import './editor.css'
 
 export interface MilkdownEditorProps {
   /** 当前 markdown 值 */
@@ -382,3 +383,4 @@ export default function MilkdownEditor(props: MilkdownEditorProps): ReactElement
     </MilkdownProvider>
   )
 }
+
