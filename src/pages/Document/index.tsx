@@ -16,7 +16,7 @@ import {
   SaveOutlined,
 } from '@ant-design/icons'
 import DocumentTree from '@/components/DocumentTree'
-import MilkdownEditor from '@/components/MilkdownEditor'
+import MarkdownEditor from '@/components/MarkdownEditor'
 import { articleService } from '@/services/article.service'
 import type { Article } from '@/types'
 import { formatTime, countWords } from '@/utils/format'
@@ -236,7 +236,7 @@ export default function Document(): ReactElement {
 
             {/* 编辑器区域 */}
             <div style={{ flex: 1, overflow: 'hidden' }}>
-              <MilkdownEditor value={editorValue} onChange={handleEditorChange} />
+              <MarkdownEditor value={editorValue} onChange={handleEditorChange} />
             </div>
           </div>
         ) : (
