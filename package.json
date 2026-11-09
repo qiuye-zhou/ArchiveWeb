@@ -28,6 +28,7 @@
     "@milkdown/preset-gfm": "^7.22.0",
     "@milkdown/react": "^7.22.0",
     "@milkdown/theme-nord": "^7.22.0",
+    "@milkdown/utils": "^7.22.0",
     "antd": "^6.5.3",
     "axios": "^1.19.0",
     "dayjs": "^1.11.21",
