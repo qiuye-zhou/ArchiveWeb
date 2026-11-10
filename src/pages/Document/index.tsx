@@ -2,7 +2,7 @@
  * 文档工作区页面
  * - 左侧 300px DocumentTree，右侧 Flex 自适应编辑区
  * - 选中文档后加载完整内容到 Milkdown 编辑器
- * - 手动保存：点击「保存」按钮或 Ctrl+S 保存标题 + 正文
+ * - 默认只读预览；点击「编辑」进入编辑态（按钮变「更新」），点击「更新」保存并退出编辑态
  * - 支持导出当前文档、删除文档
  * - 未选中文档时右侧显示 Empty 占位
  */
@@ -14,9 +14,10 @@ import {
   DeleteOutlined,
   EyeOutlined,
   SaveOutlined,
+  EditOutlined,
 } from '@ant-design/icons'
 import DocumentTree from '@/components/DocumentTree'
-import MarkdownEditor from '@/components/MarkdownEditor'
+import MilkdownEditor from '@/components/MilkdownEditor'
 import { articleService } from '@/services/article.service'
 import type { Article } from '@/types'
 import { formatTime, countWords } from '@/utils/format'
@@ -34,6 +35,8 @@ export default function Document(): ReactElement {
   const [title, setTitle] = useState('')
   // 是否有未保存改动
   const [dirty, setDirty] = useState(false)
+  // 是否处于编辑态（默认只读预览）
+  const [editing, setEditing] = useState(false)
   // 保存中
   const [saving, setSaving] = useState(false)
   // 树刷新 key
@@ -47,6 +50,7 @@ export default function Document(): ReactElement {
   /** 选中文档（来自文档树点击） */
   const handleSelectArticle = useCallback(async (article: Article) => {
     setLoadingArticle(true)
+    setEditing(false)
     justLoadedRef.current = true
     try {
       const full = await articleService.getById(article._id)
@@ -86,14 +90,15 @@ export default function Document(): ReactElement {
     setDirty(true)
   }, [])
 
-  /** 手动保存标题 + 正文 */
-  const handleSave = useCallback(async () => {
-    if (!currentArticle || !dirty || saving) return
+  /** 保存标题 + 正文，返回是否成功（无改动时直接视为成功） */
+  const handleSave = useCallback(async (): Promise<boolean> => {
+    if (!currentArticle || saving) return false
     const trimmed = title.trim()
     if (!trimmed) {
       message.warning('标题不能为空')
-      return
+      return false
     }
+    if (!dirty) return true
     try {
       setSaving(true)
       const updated = await articleService.update(currentArticle._id, {
@@ -104,24 +109,32 @@ export default function Document(): ReactElement {
       lastSavedContentRef.current = editorValue
       setDirty(false)
       message.success('已保存')
+      return true
     } catch {
       // 错误已由请求拦截器提示
+      return false
     } finally {
       setSaving(false)
     }
   }, [currentArticle, dirty, saving, title, editorValue])
 
-  // Ctrl+S / Cmd+S 快捷保存
+  /** 点击「更新」：保存成功后退出编辑态 */
+  const handleUpdate = useCallback(async () => {
+    const ok = await handleSave()
+    if (ok) setEditing(false)
+  }, [handleSave])
+
+  // Ctrl+S / Cmd+S：保存并退出编辑态
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
         e.preventDefault()
-        void handleSave()
+        void handleUpdate()
       }
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [handleSave])
+  }, [handleUpdate])
 
   /** 导出当前文档 */
   const handleExport = async () => {
@@ -153,6 +166,7 @@ export default function Document(): ReactElement {
           setEditorValue('')
           setTitle('')
           setDirty(false)
+          setEditing(false)
           lastSavedContentRef.current = ''
           setTreeRefreshKey((k) => k + 1)
         } catch {
@@ -204,19 +218,28 @@ export default function Document(): ReactElement {
                   onChange={handleTitleChange}
                   placeholder="文档标题"
                   size="large"
+                  readOnly={!editing}
                   style={{ fontWeight: 600, flex: 1, minWidth: 0 }}
                 />
-                <Tooltip title="Ctrl+S">
+                {editing ? (
+                  <Tooltip title="保存并退出编辑（Ctrl+S）">
+                    <Button
+                      icon={<SaveOutlined />}
+                      onClick={() => void handleUpdate()}
+                      loading={saving}
+                    >
+                      更新
+                    </Button>
+                  </Tooltip>
+                ) : (
                   <Button
                     type="primary"
-                    icon={<SaveOutlined />}
-                    onClick={() => void handleSave()}
-                    loading={saving}
-                    disabled={!dirty}
+                    icon={<EditOutlined />}
+                    onClick={() => setEditing(true)}
                   >
-                    保存
+                    编辑
                   </Button>
-                </Tooltip>
+                )}
                 <Button icon={<ExportOutlined />} onClick={handleExport}>
                   导出
                 </Button>
@@ -236,7 +259,11 @@ export default function Document(): ReactElement {
 
             {/* 编辑器区域 */}
             <div style={{ flex: 1, overflow: 'hidden' }}>
-              <MarkdownEditor value={editorValue} onChange={handleEditorChange} />
+              <MilkdownEditor
+                value={editorValue}
+                onChange={handleEditorChange}
+                readonly={!editing}
+              />
             </div>
           </div>
         ) : (

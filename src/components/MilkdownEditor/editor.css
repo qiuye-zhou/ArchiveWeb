@@ -1,0 +1,185 @@
+﻿/**
+ * Milkdown 编辑器体验优化（类语雀风格）
+ * - 去除编辑区周围所有边框 / outline / 阴影（黑框）
+ * - 确保文本光标（竖线）清晰可见
+ * - 统一行高、字号、间距，使排版更舒适
+ */
+
+/* ===== 容器层：去除所有黑框 ===== */
+.milkdown-editor-wrap,
+.milkdown-editor-wrap [data-milkdown-root],
+.milkdown-editor-wrap .editor,
+.milkdown-editor-wrap .ProseMirror {
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+.milkdown-editor-wrap .ProseMirror:focus,
+.milkdown-editor-wrap .ProseMirror:focus-visible,
+.milkdown-editor-wrap .ProseMirror:focus-within {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+/* ===== 编辑区基础排版 ===== */
+.milkdown-editor-wrap .ProseMirror {
+  min-height: 460px;
+  padding: 8px 4px 60px;
+  font-size: 15px;
+  line-height: 1.8;
+  color: #1f2329;
+  caret-color: #1677ff;
+  caret-width: 2px;
+}
+
+/* 选中文本颜色 */
+.milkdown-editor-wrap .ProseMirror ::selection {
+  background: rgba(22, 119, 255, 0.18);
+}
+
+/* ===== 顶级块的排版与悬停反馈 ===== */
+.milkdown-editor-wrap .ProseMirror > p,
+.milkdown-editor-wrap .ProseMirror > h1,
+.milkdown-editor-wrap .ProseMirror > h2,
+.milkdown-editor-wrap .ProseMirror > h3,
+.milkdown-editor-wrap .ProseMirror > h4,
+.milkdown-editor-wrap .ProseMirror > h5,
+.milkdown-editor-wrap .ProseMirror > h6,
+.milkdown-editor-wrap .ProseMirror > blockquote {
+  padding-left: 0;
+  transition: background 0.15s ease;
+}
+
+/* 列表不能覆盖缩进与符号：
+   theme-nord 的列表样式挂在 .milkdown-theme-nord 作用域下，当前根节点没有该类，
+   而主题引入的 Tailwind preflight 会把 ul/ol 重置为 list-style: none，
+   导致列表创建成功但看不见圆点/序号，这里显式恢复。 */
+.milkdown-editor-wrap .ProseMirror > ul,
+.milkdown-editor-wrap .ProseMirror > ol {
+  padding-left: 1.6em;
+  transition: background 0.15s ease;
+}
+
+.milkdown-editor-wrap .ProseMirror ul {
+  list-style-type: disc;
+  list-style-position: outside;
+}
+
+.milkdown-editor-wrap .ProseMirror ul ul {
+  list-style-type: circle;
+}
+
+.milkdown-editor-wrap .ProseMirror ul ul ul {
+  list-style-type: square;
+}
+
+.milkdown-editor-wrap .ProseMirror ol {
+  list-style-type: decimal;
+  list-style-position: outside;
+}
+
+.milkdown-editor-wrap .ProseMirror li::marker {
+  color: #1f2329;
+}
+
+/* 鼠标悬停在当前编辑块时给出淡色背景反馈 */
+.milkdown-editor-wrap .ProseMirror:focus-within > p:hover,
+.milkdown-editor-wrap .ProseMirror:focus-within > h1:hover,
+.milkdown-editor-wrap .ProseMirror:focus-within > h2:hover,
+.milkdown-editor-wrap .ProseMirror:focus-within > h3:hover,
+.milkdown-editor-wrap .ProseMirror:focus-within > h4:hover,
+.milkdown-editor-wrap .ProseMirror:focus-within > h5:hover,
+.milkdown-editor-wrap .ProseMirror:focus-within > h6:hover,
+.milkdown-editor-wrap .ProseMirror:focus-within > blockquote:hover,
+.milkdown-editor-wrap .ProseMirror:focus-within > ul:hover,
+.milkdown-editor-wrap .ProseMirror:focus-within > ol:hover {
+  background: rgba(0, 0, 0, 0.015);
+  border-radius: 4px;
+}
+
+/* ===== 选中节点的边框淡化 ===== */
+.milkdown-editor-wrap .ProseMirror .ProseMirror-selectednode {
+  outline: 2px solid rgba(22, 119, 255, 0.5) !important;
+  border-radius: 4px;
+}
+
+/* ===== 代码块优化 ===== */
+.milkdown-editor-wrap .ProseMirror pre {
+  background: #f6f8fa !important;
+  border-radius: 6px !important;
+  padding: 12px 16px !important;
+  border: none !important;
+}
+
+/* ===== 引用块 ===== */
+.milkdown-editor-wrap .ProseMirror blockquote {
+  border-left-color: #1677ff !important;
+  margin-left: 0 !important;
+}
+
+/* ===== 标题层级 =====
+   主题的标题字号挂在 .milkdown-theme-nord 作用域下，当前根节点没有该类，
+   而 Tailwind preflight 会重置 h1-h6 的字号/字重，导致各级标题看起来几乎一样，
+   这里显式定义一套字号/字重/层级样式。 */
+.milkdown-editor-wrap .ProseMirror h1,
+.milkdown-editor-wrap .ProseMirror h2,
+.milkdown-editor-wrap .ProseMirror h3,
+.milkdown-editor-wrap .ProseMirror h4,
+.milkdown-editor-wrap .ProseMirror h5,
+.milkdown-editor-wrap .ProseMirror h6 {
+  margin-top: 1.6rem !important;
+  margin-bottom: 0.6rem !important;
+  line-height: 1.4;
+  color: #1f2329;
+  font-weight: 600;
+}
+
+.milkdown-editor-wrap .ProseMirror h1 {
+  margin-top: 2rem !important;
+  font-size: 1.9em;
+  font-weight: 700;
+  padding-bottom: 0.25em;
+  border-bottom: 1px solid #eaecef;
+}
+
+.milkdown-editor-wrap .ProseMirror h2 {
+  font-size: 1.5em;
+  font-weight: 700;
+  padding-bottom: 0.2em;
+  border-bottom: 1px solid #f0f1f3;
+}
+
+.milkdown-editor-wrap .ProseMirror h3 {
+  font-size: 1.25em;
+}
+
+.milkdown-editor-wrap .ProseMirror h4 {
+  font-size: 1.1em;
+}
+
+.milkdown-editor-wrap .ProseMirror h5 {
+  font-size: 1em;
+}
+
+.milkdown-editor-wrap .ProseMirror h6 {
+  font-size: 0.875em;
+  color: #8c8c8c;
+}
+
+/* ===== 段落间距 ===== */
+.milkdown-editor-wrap .ProseMirror p {
+  margin: 0.6em 0 !important;
+}
+
+/* ===== 滚动条美化 ===== */
+.milkdown-editor-wrap .ProseMirror::-webkit-scrollbar {
+  width: 6px;
+}
+.milkdown-editor-wrap .ProseMirror::-webkit-scrollbar-thumb {
+  background: #d9d9d9;
+  border-radius: 3px;
+}
+.milkdown-editor-wrap .ProseMirror::-webkit-scrollbar-thumb:hover {
+  background: #bfbfbf;
+}
