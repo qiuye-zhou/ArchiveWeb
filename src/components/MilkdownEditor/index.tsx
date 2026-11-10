@@ -71,6 +71,8 @@ export interface MilkdownEditorProps {
   onChange: (md: string) => void
   /** 是否只读 */
   readonly?: boolean
+  /** 是否隐藏工具栏（分享页等纯阅读场景） */
+  hideToolbar?: boolean
 }
 
 /** 编辑器渲染模式 */
@@ -86,7 +88,7 @@ interface CommandLike<T = unknown> {
  * 通过 refs 持有最新的 value/onChange/readonly，避免重建编辑器。
  */
 function EditorCore(props: MilkdownEditorProps): ReactElement {
-  const { value, onChange, readonly } = props
+  const { value, onChange, readonly, hideToolbar } = props
 
   // 持有最新 props 的 refs（供编辑器工厂与监听器读取，保证闭包始终拿到最新值）
   const valueRef = useRef<string>(value)
@@ -265,6 +267,7 @@ function EditorCore(props: MilkdownEditorProps): ReactElement {
           后续输入会落到按钮上，表现为「点了格式却打不出字」 */}
       <div
         style={{
+          display: hideToolbar ? 'none' : undefined,
           padding: '8px 12px',
           borderBottom: '1px solid #f0f0f0',
           background: '#fafafa',

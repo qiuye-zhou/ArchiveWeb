@@ -7,7 +7,7 @@
 import { useEffect } from 'react'
 import { Card, Form, Input, Button, message, Typography } from 'antd'
 import { UserOutlined, LockOutlined } from '@ant-design/icons'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuthStore } from '@/store/useAuthStore'
 import { initService } from '@/services/init.service'
 
@@ -18,7 +18,15 @@ interface LoginFormValues {
 
 export default function Login() {
   const navigate = useNavigate()
+  const location = useLocation()
+  const [searchParams] = useSearchParams()
   const login = useAuthStore((s) => s.login)
+
+  // 登录成功后的跳转目标：优先 URL 的 redirect 参数，其次路由守卫记录的来源路径
+  const redirect =
+    searchParams.get('redirect') ?? (location.state as { from?: string } | null)?.from ?? '/'
+  // 只允许站内路径，避免开放重定向
+  const target = redirect.startsWith('/') ? redirect : '/'
 
   // 检查系统是否已初始化
   useEffect(() => {
@@ -39,7 +47,7 @@ export default function Login() {
     try {
       await login(values)
       message.success('登录成功')
-      navigate('/', { replace: true })
+      navigate(target, { replace: true })
     } catch (e) {
       const msg = e instanceof Error ? e.message : '登录失败'
       message.error(msg)

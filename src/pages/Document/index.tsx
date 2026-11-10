@@ -8,6 +8,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ReactElement } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { Layout, Input, Button, Spin, Empty, Typography, message, Modal, Tooltip } from 'antd'
 import {
   ExportOutlined,
@@ -15,6 +16,7 @@ import {
   EyeOutlined,
   SaveOutlined,
   EditOutlined,
+  ShareAltOutlined,
 } from '@ant-design/icons'
 import DocumentTree from '@/components/DocumentTree'
 import MilkdownEditor from '@/components/MilkdownEditor'
@@ -29,6 +31,11 @@ const { Sider, Content } = Layout
 const LAST_ARTICLE_STORAGE_KEY = 'archive-web:last-article-id'
 
 export default function Document(): ReactElement {
+  const [searchParams, setSearchParams] = useSearchParams()
+  // 首次进入时 URL 上指定的文档（分享链接登录后跳转），优先于本地记录
+  const initialArticleIdRef = useRef<string | null>(searchParams.get('article'))
+  // 通过分享链接跳转时自动进入编辑态
+  const initialEditingRef = useRef<boolean>(searchParams.get('edit') === '1')
   // 当前选中文档（完整，含 content）
   const [currentArticle, setCurrentArticle] = useState<Article | null>(null)
   const [loadingArticle, setLoadingArticle] = useState(false)
@@ -51,34 +58,40 @@ export default function Document(): ReactElement {
   const justLoadedRef = useRef<boolean>(false)
 
   /** 选中文档（来自文档树点击） */
-  const handleSelectArticle = useCallback(async (article: Article) => {
-    setLoadingArticle(true)
-    setEditing(false)
-    justLoadedRef.current = true
-    try {
-      const full = await articleService.getById(article._id)
-      setCurrentArticle(full)
-      setTitle(full.title)
-      setEditorValue(full.content ?? '')
-      lastSavedContentRef.current = full.content ?? ''
-      setDirty(false)
-      localStorage.setItem(LAST_ARTICLE_STORAGE_KEY, full._id)
-    } catch {
-      // 加载失败：仍使用基本信息占位
-      setCurrentArticle(article)
-      setTitle(article.title)
-      setEditorValue(article.content ?? '')
-      lastSavedContentRef.current = article.content ?? ''
-      setDirty(false)
-      localStorage.setItem(LAST_ARTICLE_STORAGE_KEY, article._id)
-    } finally {
-      setLoadingArticle(false)
-    }
-  }, [])
+  const handleSelectArticle = useCallback(
+    async (article: Article) => {
+      setLoadingArticle(true)
+      setEditing(false)
+      justLoadedRef.current = true
+      try {
+        const full = await articleService.getById(article._id)
+        setCurrentArticle(full)
+        setTitle(full.title)
+        setEditorValue(full.content ?? '')
+        lastSavedContentRef.current = full.content ?? ''
+        setDirty(false)
+        localStorage.setItem(LAST_ARTICLE_STORAGE_KEY, full._id)
+        setSearchParams({ article: full._id }, { replace: true })
+      } catch {
+        // 加载失败：仍使用基本信息占位
+        setCurrentArticle(article)
+        setTitle(article.title)
+        setEditorValue(article.content ?? '')
+        lastSavedContentRef.current = article.content ?? ''
+        setDirty(false)
+        localStorage.setItem(LAST_ARTICLE_STORAGE_KEY, article._id)
+        setSearchParams({ article: article._id }, { replace: true })
+      } finally {
+        setLoadingArticle(false)
+      }
+    },
+    [setSearchParams],
+  )
 
-  // 刷新页面后恢复上次打开的文档（文档已被删除时清除记录）
+  // 刷新页面 / 从分享链接登录后跳转时恢复文档
+  // 优先使用 URL 上的 article 参数，其次使用本地记录
   useEffect(() => {
-    const savedId = localStorage.getItem(LAST_ARTICLE_STORAGE_KEY)
+    const savedId = initialArticleIdRef.current ?? localStorage.getItem(LAST_ARTICLE_STORAGE_KEY)
     if (!savedId) return
     let cancelled = false
     setLoadingArticle(true)
@@ -92,6 +105,9 @@ export default function Document(): ReactElement {
         lastSavedContentRef.current = full.content ?? ''
         justLoadedRef.current = true
         setDirty(false)
+        localStorage.setItem(LAST_ARTICLE_STORAGE_KEY, full._id)
+        // 来自分享链接：直接进入编辑态
+        if (initialEditingRef.current) setEditing(true)
       })
       .catch(() => {
         localStorage.removeItem(LAST_ARTICLE_STORAGE_KEY)
@@ -169,6 +185,23 @@ export default function Document(): ReactElement {
     return () => window.removeEventListener('keydown', handler)
   }, [handleUpdate])
 
+  /** 复制当前文档的分享链接（免登录可访问） */
+  const handleShare = async () => {
+    if (!currentArticle) return
+    const url = `${window.location.origin}/share/${currentArticle._id}`
+    try {
+      await navigator.clipboard.writeText(url)
+      message.success('分享链接已复制，可直接发送给他人')
+    } catch {
+      // 非 HTTPS 或浏览器拒绝剪贴板权限时，弹窗提供可手动复制的链接
+      Modal.info({
+        title: '分享链接',
+        content: <Input value={url} readOnly style={{ marginTop: 8 }} />,
+        okText: '知道了',
+      })
+    }
+  }
+
   /** 导出当前文档 */
   const handleExport = async () => {
     if (!currentArticle) return
@@ -202,6 +235,7 @@ export default function Document(): ReactElement {
           setEditing(false)
           lastSavedContentRef.current = ''
           localStorage.removeItem(LAST_ARTICLE_STORAGE_KEY)
+          setSearchParams({}, { replace: true })
           setTreeRefreshKey((k) => k + 1)
         } catch {
           // 错误已提示
@@ -274,6 +308,9 @@ export default function Document(): ReactElement {
                     编辑
                   </Button>
                 )}
+                <Button icon={<ShareAltOutlined />} onClick={() => void handleShare()}>
+                  分享
+                </Button>
                 <Button icon={<ExportOutlined />} onClick={handleExport}>
                   导出
                 </Button>

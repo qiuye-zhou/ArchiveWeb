@@ -15,6 +15,7 @@ import Backup from '@/pages/Backup'
 import Logs from '@/pages/Loglist'
 import Settings from '@/pages/Settings'
 import NotFound from '@/pages/NotFound'
+import Share from '@/pages/Share'
 import { RequireAuth, RedirectIfAuthed } from './guards'
 
 export const routes: RouteObject[] = [
@@ -27,6 +28,7 @@ export const routes: RouteObject[] = [
     ),
   },
   { path: '/init', element: <Init /> },
+  { path: '/share/:id', element: <Share /> },
   {
     path: '/',
     element: (
