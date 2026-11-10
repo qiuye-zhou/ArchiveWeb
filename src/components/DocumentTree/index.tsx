@@ -58,6 +58,21 @@ interface FolderOption {
 /** 文章节点 key 前缀，用于与文件夹 id 区分 */
 const ARTICLE_KEY_PREFIX = 'art_'
 
+/** 展开文件夹 key 的本地存储键名，用于刷新后恢复展开状态 */
+const EXPANDED_STORAGE_KEY = 'archive-web:expanded-folders'
+
+/** 读取刷新前记录的展开文件夹 key（解析失败时返回空数组） */
+function readExpandedKeys(): React.Key[] {
+  try {
+    const raw = localStorage.getItem(EXPANDED_STORAGE_KEY)
+    if (!raw) return []
+    const parsed: unknown = JSON.parse(raw)
+    return Array.isArray(parsed) ? parsed.filter((k): k is string => typeof k === 'string') : []
+  } catch {
+    return []
+  }
+}
+
 /** 将文章 id 转为树节点 key */
 const articleKey = (id: string) => `${ARTICLE_KEY_PREFIX}${id}`
 
@@ -127,7 +142,7 @@ export default function DocumentTree(props: DocumentTreeProps): ReactElement {
 
   const [tree, setTree] = useState<Category[]>([])
   const [loading, setLoading] = useState(false)
-  const [expandedKeys, setExpandedKeys] = useState<React.Key[]>([])
+  const [expandedKeys, setExpandedKeys] = useState<React.Key[]>(readExpandedKeys)
   const [selectedKeys, setSelectedKeys] = useState<React.Key[]>([])
   /** 选中的文件夹 id（用于新建文档、导入 MD 等操作定位父目录） */
   const [activeFolderId, setActiveFolderId] = useState<string | undefined>(undefined)
@@ -219,6 +234,29 @@ export default function DocumentTree(props: DocumentTreeProps): ReactElement {
   useEffect(() => {
     loadTree()
   }, [loadTree, refreshKey])
+
+  // 展开状态写入本地存储，刷新后恢复
+  useEffect(() => {
+    try {
+      localStorage.setItem(EXPANDED_STORAGE_KEY, JSON.stringify(expandedKeys))
+    } catch {
+      // 隐私模式等场景下写入失败，忽略
+    }
+  }, [expandedKeys])
+
+  // 树数据就绪后：同步展开状态并补加载文章列表（否则展开后看不到子文档）
+  useEffect(() => {
+    if (!tree.length) return
+    // 重新赋值一次以强制刷新引用：左侧树首次挂载时 treeData 还是空的，
+    // rc-tree 的受控 expandedKeys 只在 prop 引用变化时才会重新同步，
+    // 不刷新引用会出现「localStorage 里有展开记录，但界面仍是折叠的」。
+    setExpandedKeys((prev) => [...prev])
+    expandedKeys.forEach((k) => {
+      if (!isArticleKey(k) && typeof k === 'string') void loadFolderArticles(k)
+    })
+    // 仅在树数据变化时补加载，避免展开状态变化时重复触发
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tree])
 
   /** 文件夹下拉选项（包含"根目录"占位） */
   const folderOptions = useMemo<FolderOption[]>(() => {
@@ -521,21 +559,20 @@ export default function DocumentTree(props: DocumentTreeProps): ReactElement {
 
   const treeData = useMemo(() => toTreeData(tree, articlesByFolder), [tree, articlesByFolder])
 
-  // 当外部 selectedArticleId 变化（例如编辑器内删除后清空），同步选中状态
+  // 当外部 selectedArticleId 变化（刷新恢复 / 编辑器内删除后清空），同步选中状态
   useEffect(() => {
-    if (selectedArticleId) {
-      const k = articleKey(selectedArticleId)
-      if (selectedKeys[0] !== k) {
-        setSelectedKeys([k])
-        // 如果该文章所在文件夹尚未展开，尝试找到并展开
-        let folderId: string | undefined
-        articlesByFolder.forEach((list, fid) => {
-          if (list.some((a) => a._id === selectedArticleId)) folderId = fid
-        })
-        if (folderId && !expandedKeys.includes(folderId)) {
-          setExpandedKeys((prev) => [...prev, folderId as string])
-        }
-      }
+    if (!selectedArticleId) {
+      setSelectedKeys([])
+      return
+    }
+    setSelectedKeys([articleKey(selectedArticleId)])
+    // 若已知该文章所在文件夹且尚未展开，则展开
+    let folderId: string | undefined
+    articlesByFolder.forEach((list, fid) => {
+      if (list.some((a) => a._id === selectedArticleId)) folderId = fid
+    })
+    if (folderId && !expandedKeys.includes(folderId)) {
+      setExpandedKeys((prev) => [...prev, folderId as string])
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedArticleId])

@@ -25,6 +25,9 @@ import { downloadBlob } from '@/utils/download'
 
 const { Sider, Content } = Layout
 
+/** 本地存储键：上次打开的文档 id，用于刷新后恢复 */
+const LAST_ARTICLE_STORAGE_KEY = 'archive-web:last-article-id'
+
 export default function Document(): ReactElement {
   // 当前选中文档（完整，含 content）
   const [currentArticle, setCurrentArticle] = useState<Article | null>(null)
@@ -59,6 +62,7 @@ export default function Document(): ReactElement {
       setEditorValue(full.content ?? '')
       lastSavedContentRef.current = full.content ?? ''
       setDirty(false)
+      localStorage.setItem(LAST_ARTICLE_STORAGE_KEY, full._id)
     } catch {
       // 加载失败：仍使用基本信息占位
       setCurrentArticle(article)
@@ -66,8 +70,37 @@ export default function Document(): ReactElement {
       setEditorValue(article.content ?? '')
       lastSavedContentRef.current = article.content ?? ''
       setDirty(false)
+      localStorage.setItem(LAST_ARTICLE_STORAGE_KEY, article._id)
     } finally {
       setLoadingArticle(false)
+    }
+  }, [])
+
+  // 刷新页面后恢复上次打开的文档（文档已被删除时清除记录）
+  useEffect(() => {
+    const savedId = localStorage.getItem(LAST_ARTICLE_STORAGE_KEY)
+    if (!savedId) return
+    let cancelled = false
+    setLoadingArticle(true)
+    articleService
+      .getById(savedId)
+      .then((full) => {
+        if (cancelled) return
+        setCurrentArticle(full)
+        setTitle(full.title)
+        setEditorValue(full.content ?? '')
+        lastSavedContentRef.current = full.content ?? ''
+        justLoadedRef.current = true
+        setDirty(false)
+      })
+      .catch(() => {
+        localStorage.removeItem(LAST_ARTICLE_STORAGE_KEY)
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingArticle(false)
+      })
+    return () => {
+      cancelled = true
     }
   }, [])
 
@@ -168,6 +201,7 @@ export default function Document(): ReactElement {
           setDirty(false)
           setEditing(false)
           lastSavedContentRef.current = ''
+          localStorage.removeItem(LAST_ARTICLE_STORAGE_KEY)
           setTreeRefreshKey((k) => k + 1)
         } catch {
           // 错误已提示
