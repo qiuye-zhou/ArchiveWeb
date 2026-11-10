@@ -51,11 +51,11 @@ export function formatFileSize(bytes?: unknown): string {
 export function countWords(text?: string | null): number {
   if (!text) return 0
   // 去除 markdown 语法：代码块、行内代码、链接、图片、标题符号、列表符号、引用、粗体斜体删除线、水平线
-  let cleaned = text
-    // 代码块 ```...```
-    .replace(/```[\s\S]*?```/g, '')
-    // 行内代码 `...`
-    .replace(/`[^`]*`/g, '')
+  const cleaned = text
+    // 代码块：只去掉 ``` 围栏和语言标识，代码内容本身要计入字数
+    .replace(/^[ \t]*```[^\n]*$/gm, '')
+    // 行内代码：只去掉反引号，内容计入字数
+    .replace(/`/g, '')
     // 图片 ![alt](url) 和 链接 [text](url) -> 保留 text
     .replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1')
     .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')

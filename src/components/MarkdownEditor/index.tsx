@@ -64,6 +64,10 @@ export default function MarkdownEditor({
       previewTheme="github"
       readOnly={readOnly}
       showCodeRowNumber
+      // 关闭编辑器自带的状态栏字数：它统计的是原始字符串长度（含 Markdown 语法符号），
+      // 与页头 countWords 的口径不一致，会出现「上方字数」和「下方字数」对不上。
+      // 字数统一由页头展示。
+      footers={[]}
       style={{ height }}
     />
   )
