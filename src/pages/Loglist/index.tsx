@@ -15,12 +15,19 @@ import {
   message,
   Modal,
   Spin,
+  Alert,
+  Select,
 } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
-import { DeleteOutlined, EyeOutlined, ReloadOutlined } from '@ant-design/icons'
+import {
+  DeleteOutlined,
+  DownloadOutlined,
+  EyeOutlined,
+  ReloadOutlined,
+} from '@ant-design/icons'
 import { healthService } from '@/services/health.service'
 import { useAuthStore } from '@/store/useAuthStore'
-import type { LogFile } from '@/types'
+import type { LogFile, LogContent } from '@/types'
 import { formatFileSize, formatTime } from '@/utils/format'
 import Empty from '@/components/common/Empty'
 
@@ -28,6 +35,13 @@ import Empty from '@/components/common/Empty'
 function isFormattedSize(v: unknown): v is string {
   return typeof v === 'string' && /\d.*\s*(B|KB|MB|GB|TB)$/i.test(v.trim())
 }
+
+/** 可供选择的「显示最后 N 行」 */
+const TAIL_OPTIONS = [
+  { value: 1000, label: '最后 1000 行' },
+  { value: 2000, label: '最后 2000 行' },
+  { value: 5000, label: '最后 5000 行' },
+]
 
 export default function Logs() {
   const [list, setList] = useState<LogFile[]>([])
@@ -38,8 +52,10 @@ export default function Logs() {
   // Modal 状态（点击查看时使用）
   const [modalOpen, setModalOpen] = useState(false)
   const [modalFilename, setModalFilename] = useState<string>('')
-  const [modalContent, setModalContent] = useState<string>('')
+  const [modalData, setModalData] = useState<LogContent | null>(null)
   const [modalLoading, setModalLoading] = useState<boolean>(false)
+  // 只展示末尾 N 行，防止超大日志渲染卡死
+  const [tailLines, setTailLines] = useState<number>(2000)
 
   /** 拉取日志列表 */
   const fetchList = useCallback(async () => {
@@ -58,19 +74,39 @@ export default function Logs() {
     void fetchList()
   }, [fetchList])
 
-  /** 点击查看：打开 Modal 并拉取日志内容 */
-  const handleView = useCallback(async (filename: string) => {
-    setModalFilename(filename)
-    setModalContent('')
-    setModalOpen(true)
-    setModalLoading(true)
+  /** 点击查看：打开 Modal 并拉取日志内容（只取末尾 N 行） */
+  const handleView = useCallback(
+    async (filename: string, lines = tailLines) => {
+      setModalFilename(filename)
+      setModalData(null)
+      setModalOpen(true)
+      setModalLoading(true)
+      try {
+        const data = await healthService.getLogContent(filename, lines)
+        setModalData(data)
+      } catch {
+        setModalData(null)
+      } finally {
+        setModalLoading(false)
+      }
+    },
+    [tailLines],
+  )
+
+  /** 下载完整日志文件 */
+  const handleDownload = useCallback(async (filename: string) => {
     try {
-      const data = await healthService.getLogContent(filename)
-      setModalContent(data.content ?? '')
+      const blob = await healthService.downloadLog(filename)
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = filename
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      URL.revokeObjectURL(url)
     } catch {
-      setModalContent('')
-    } finally {
-      setModalLoading(false)
+      // 拦截器已报错
     }
   }, [])
 
@@ -220,6 +256,13 @@ export default function Logs() {
         open={modalOpen}
         onCancel={() => setModalOpen(false)}
         footer={[
+          <Button
+            key="download"
+            icon={<DownloadOutlined />}
+            onClick={() => void handleDownload(modalFilename)}
+          >
+            下载完整文件
+          </Button>,
           <Button key="close" onClick={() => setModalOpen(false)}>
             关闭
           </Button>,
@@ -227,6 +270,37 @@ export default function Logs() {
         width={960}
         destroyOnHidden
       >
+        <Space style={{ marginBottom: 12 }} size={8} wrap>
+          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+            显示范围：
+          </Typography.Text>
+          <Select
+            size="small"
+            value={tailLines}
+            options={TAIL_OPTIONS}
+            style={{ width: 140 }}
+            onChange={(value) => {
+              setTailLines(value)
+              void handleView(modalFilename, value)
+            }}
+          />
+          {modalData?.size ? (
+            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+              文件大小：{formatFileSize(modalData.size)}
+            </Typography.Text>
+          ) : null}
+        </Space>
+
+        {modalData?.truncated ? (
+          <Alert
+            type="warning"
+            showIcon
+            style={{ marginBottom: 12 }}
+            message={`日志文件较大，仅显示末尾 ${modalData.shownLines ?? tailLines} 行`}
+            description="需要查看完整内容请点击下方「下载完整文件」。"
+          />
+        ) : null}
+
         <Spin spinning={modalLoading}>
           <pre
             style={{
@@ -244,7 +318,7 @@ export default function Logs() {
               wordBreak: 'break-all',
             }}
           >
-            {modalContent || '(空)'}
+            {modalData?.content || '(空)'}
           </pre>
         </Spin>
       </Modal>

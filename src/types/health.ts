@@ -34,5 +34,11 @@ export interface LogFile {
 export interface LogContent {
   filename: string
   content: string
+  /** 文件总字节数 */
+  size?: number
+  /** 实际返回的行数 */
+  shownLines?: number
+  /** 是否因文件过大只返回了末尾内容 */
+  truncated?: boolean
 }
 

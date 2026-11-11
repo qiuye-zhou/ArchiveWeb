@@ -18,9 +18,15 @@ export const healthService = {
   getLogs(): Promise<LogFile[]> {
     return request.get<LogFile[]>('/health/log/')
   },
-  /** 获取日志文件内容 */
-  getLogContent(filename: string): Promise<LogContent> {
-    return request.get<LogContent>(`/health/log/${encodeURIComponent(filename)}`)
+  /** 获取日志文件内容（后端只返回末尾若干行，避免大文件卡死） */
+  getLogContent(filename: string, tailLines?: number): Promise<LogContent> {
+    return request.get<LogContent>(`/health/log/${encodeURIComponent(filename)}`, {
+      tailLines,
+    })
+  },
+  /** 下载完整日志文件（大文件查看兜底） */
+  downloadLog(filename: string): Promise<Blob> {
+    return request.download(`/health/log/${encodeURIComponent(filename)}/download`)
   },
   /** 删除指定日志文件 */
   deleteLog(filename: string): Promise<void> {
