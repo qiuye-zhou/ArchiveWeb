@@ -19,6 +19,7 @@ import {
 import type { ColumnsType } from 'antd/es/table'
 import { DeleteOutlined, EyeOutlined, ReloadOutlined } from '@ant-design/icons'
 import { healthService } from '@/services/health.service'
+import { useAuthStore } from '@/store/useAuthStore'
 import type { LogFile } from '@/types'
 import { formatFileSize, formatTime } from '@/utils/format'
 import Empty from '@/components/common/Empty'
@@ -31,6 +32,8 @@ function isFormattedSize(v: unknown): v is string {
 export default function Logs() {
   const [list, setList] = useState<LogFile[]>([])
   const [listLoading, setListLoading] = useState<boolean>(false)
+  // 删除日志仅管理员可见
+  const isAdmin = useAuthStore((s) => s.user?.role !== 'editor')
 
   // Modal 状态（点击查看时使用）
   const [modalOpen, setModalOpen] = useState(false)
@@ -142,17 +145,19 @@ export default function Logs() {
           >
             查看
           </Button>
-          <Popconfirm
-            title="确认删除该日志文件？"
-            okText="删除"
-            cancelText="取消"
-            okButtonProps={{ danger: true }}
-            onConfirm={() => void handleDelete(record.filename)}
-          >
-            <Button type="link" size="small" danger icon={<DeleteOutlined />}>
-              删除
-            </Button>
-          </Popconfirm>
+          {isAdmin ? (
+            <Popconfirm
+              title="确认删除该日志文件？"
+              okText="删除"
+              cancelText="取消"
+              okButtonProps={{ danger: true }}
+              onConfirm={() => void handleDelete(record.filename)}
+            >
+              <Button type="link" size="small" danger icon={<DeleteOutlined />}>
+                删除
+              </Button>
+            </Popconfirm>
+          ) : null}
         </Space>
       ),
     },
@@ -169,19 +174,21 @@ export default function Logs() {
         <Button icon={<ReloadOutlined />} onClick={() => void fetchList()}>
           刷新列表
         </Button>
-        <Popconfirm
-          title="确认删除全部日志文件？"
-          description="该操作将清空所有日志，不可恢复。"
-          okText="删除全部"
-          cancelText="取消"
-          okButtonProps={{ danger: true }}
-          onConfirm={() => void handleDeleteAll()}
-          disabled={!list.length}
-        >
-          <Button danger icon={<DeleteOutlined />} disabled={!list.length}>
-            删除全部日志
-          </Button>
-        </Popconfirm>
+        {isAdmin ? (
+          <Popconfirm
+            title="确认删除全部日志文件？"
+            description="该操作将清空所有日志，不可恢复。"
+            okText="删除全部"
+            cancelText="取消"
+            okButtonProps={{ danger: true }}
+            onConfirm={() => void handleDeleteAll()}
+            disabled={!list.length}
+          >
+            <Button danger icon={<DeleteOutlined />} disabled={!list.length}>
+              删除全部日志
+            </Button>
+          </Popconfirm>
+        ) : null}
       </Space>
 
       <Card title="日志文件" styles={{ body: { padding: 0 } }}>

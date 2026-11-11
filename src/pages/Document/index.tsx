@@ -9,7 +9,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ReactElement } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { Layout, Input, Button, Spin, Empty, Typography, message, Modal, Tooltip } from 'antd'
+import { Layout, Input, Button, Spin, Empty, Typography, message, Modal, Tooltip, Drawer, List, Popconfirm } from 'antd'
 import {
   ExportOutlined,
   DeleteOutlined,
@@ -17,11 +17,13 @@ import {
   SaveOutlined,
   EditOutlined,
   ShareAltOutlined,
+  HistoryOutlined,
 } from '@ant-design/icons'
 import DocumentTree from '@/components/DocumentTree'
 import MilkdownEditor from '@/components/MilkdownEditor'
 import { articleService } from '@/services/article.service'
-import type { Article } from '@/types'
+import { useAuthStore } from '@/store/useAuthStore'
+import type { Article, ArticleRevision, ArticleRevisionDetail } from '@/types'
 import { formatTime, countWords } from '@/utils/format'
 import { downloadBlob } from '@/utils/download'
 
@@ -51,6 +53,15 @@ export default function Document(): ReactElement {
   const [saving, setSaving] = useState(false)
   // 树刷新 key
   const [treeRefreshKey, setTreeRefreshKey] = useState(0)
+  // 历史版本抽屉
+  const [historyOpen, setHistoryOpen] = useState(false)
+  const [revisions, setRevisions] = useState<ArticleRevision[]>([])
+  const [revisionsLoading, setRevisionsLoading] = useState(false)
+  // 历史版本预览（含正文）
+  const [previewRevision, setPreviewRevision] = useState<ArticleRevisionDetail | null>(null)
+  const [restoring, setRestoring] = useState(false)
+  // 是否管理员（删除等高危操作仅管理员可见）
+  const isAdmin = useAuthStore((s) => s.user?.role !== 'editor')
 
   // 最近一次已保存的内容，用于判断是否需要保存
   const lastSavedContentRef = useRef<string>('')
@@ -202,6 +213,61 @@ export default function Document(): ReactElement {
     }
   }
 
+  /** 打开历史版本抽屉并加载列表 */
+  const handleOpenHistory = useCallback(async () => {
+    if (!currentArticle) return
+    setHistoryOpen(true)
+    setRevisionsLoading(true)
+    try {
+      const list = await articleService.listRevisions(currentArticle._id)
+      setRevisions(list)
+    } catch {
+      // 错误已由请求拦截器提示
+    } finally {
+      setRevisionsLoading(false)
+    }
+  }, [currentArticle])
+
+  /** 预览某个历史版本的完整内容 */
+  const handlePreviewRevision = useCallback(
+    async (revisionId: string) => {
+      if (!currentArticle) return
+      try {
+        const detail = await articleService.getRevision(currentArticle._id, revisionId)
+        setPreviewRevision(detail)
+      } catch {
+        // 错误已由请求拦截器提示
+      }
+    },
+    [currentArticle],
+  )
+
+  /** 回溯到指定历史版本 */
+  const handleRestoreRevision = useCallback(
+    async (revisionId: string) => {
+      if (!currentArticle || restoring) return
+      try {
+        setRestoring(true)
+        const updated = await articleService.restoreRevision(currentArticle._id, revisionId)
+        setCurrentArticle({ ...currentArticle, ...updated })
+        setTitle(updated.title ?? title)
+        justLoadedRef.current = true
+        setEditorValue(updated.content ?? '')
+        lastSavedContentRef.current = updated.content ?? ''
+        setDirty(false)
+        setEditing(false)
+        setPreviewRevision(null)
+        setHistoryOpen(false)
+        message.success('已回溯到该历史版本')
+      } catch {
+        // 错误已由请求拦截器提示
+      } finally {
+        setRestoring(false)
+      }
+    },
+    [currentArticle, restoring, title],
+  )
+
   /** 导出当前文档 */
   const handleExport = async () => {
     if (!currentArticle) return
@@ -308,21 +374,31 @@ export default function Document(): ReactElement {
                     编辑
                   </Button>
                 )}
+                <Button icon={<HistoryOutlined />} onClick={() => void handleOpenHistory()}>
+                  历史
+                </Button>
                 <Button icon={<ShareAltOutlined />} onClick={() => void handleShare()}>
                   分享
                 </Button>
                 <Button icon={<ExportOutlined />} onClick={handleExport}>
                   导出
                 </Button>
-                <Button danger icon={<DeleteOutlined />} onClick={handleDelete}>
-                  删除
-                </Button>
+                {isAdmin ? (
+                  <Button danger icon={<DeleteOutlined />} onClick={handleDelete}>
+                    删除
+                  </Button>
+                ) : null}
               </div>
               {/* 文档元信息 */}
               <div style={{ marginTop: 8 }}>
                 <Typography.Text type="secondary" style={{ fontSize: 12 }}>
                   创建：{formatTime(currentArticle.created)} | 更新：
                   {formatTime(currentArticle.modified)} | 阅读量：{currentArticle.views ?? 0} | 字数：{countWords(editorValue)}
+                  {currentArticle.lastModifiedByName ? (
+                    <span>
+                      {' '}| 最后由 <Typography.Text strong style={{ fontSize: 12 }}>{currentArticle.lastModifiedByName}</Typography.Text> 修改
+                    </span>
+                  ) : null}
                   {dirty ? <Typography.Text type="warning" style={{ marginLeft: 8 }}>未保存</Typography.Text> : null}
                 </Typography.Text>
               </div>
@@ -358,6 +434,100 @@ export default function Document(): ReactElement {
           </div>
         )}
       </Content>
+
+      {/* 历史版本抽屉 */}
+      <Drawer
+        title="历史版本"
+        open={historyOpen}
+        onClose={() => setHistoryOpen(false)}
+        width={420}
+      >
+        <Spin spinning={revisionsLoading}>
+          {revisions.length === 0 && !revisionsLoading ? (
+            <Empty description="暂无历史版本（保存文档后自动记录）" />
+          ) : (
+            <List
+              dataSource={revisions}
+              renderItem={(rev) => (
+                <List.Item
+                  actions={[
+                    <Button
+                      key="preview"
+                      size="small"
+                      type="link"
+                      onClick={() => void handlePreviewRevision(rev.id)}
+                    >
+                      查看
+                    </Button>,
+                    <Popconfirm
+                      key="restore"
+                      title="回溯到此版本？当前内容将被覆盖（会自动留存为新历史）"
+                      okText="回溯"
+                      cancelText="取消"
+                      onConfirm={() => void handleRestoreRevision(rev.id)}
+                    >
+                      <Button size="small" type="link" danger loading={restoring}>
+                        回溯
+                      </Button>
+                    </Popconfirm>,
+                  ]}
+                >
+                  <List.Item.Meta
+                    title={
+                      <span>
+                        <Typography.Text strong>{rev.editorName}</Typography.Text>
+                        <Typography.Text type="secondary" style={{ marginLeft: 8, fontSize: 12 }}>
+                          {formatTime(rev.created)}
+                        </Typography.Text>
+                      </span>
+                    }
+                    description={`标题：${rev.title || '（无标题）'}`}
+                  />
+                </List.Item>
+              )}
+            />
+          )}
+        </Spin>
+      </Drawer>
+
+      {/* 历史版本预览弹窗 */}
+      <Modal
+        title={
+          previewRevision
+            ? `${previewRevision.title || '（无标题）'} — ${previewRevision.editorName} 修改于 ${formatTime(previewRevision.created)}`
+            : ''
+        }
+        open={!!previewRevision}
+        onCancel={() => setPreviewRevision(null)}
+        width={860}
+        footer={[
+          <Button key="close" onClick={() => setPreviewRevision(null)}>
+            关闭
+          </Button>,
+          <Popconfirm
+            key="restore"
+            title="回溯到此版本？当前内容将被覆盖"
+            okText="回溯"
+            cancelText="取消"
+            onConfirm={() => previewRevision && void handleRestoreRevision(previewRevision.id)}
+          >
+            <Button type="primary" danger loading={restoring}>
+              回溯到此版本
+            </Button>
+          </Popconfirm>,
+        ]}
+      >
+        {previewRevision ? (
+          <div style={{ height: '60vh', overflow: 'auto' }}>
+            <MilkdownEditor
+              value={previewRevision.content}
+              onChange={() => {}}
+              readonly
+              hideToolbar
+            />
+          </div>
+        ) : null}
+      </Modal>
     </Layout>
   )
 }

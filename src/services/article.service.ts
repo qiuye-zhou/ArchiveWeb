@@ -5,6 +5,8 @@
 import { request } from './request'
 import type {
   Article,
+  ArticleRevision,
+  ArticleRevisionDetail,
   CreateArticleDto,
   UpdateArticleDto,
   QueryArticleDto,
@@ -61,5 +63,19 @@ export const articleService = {
   /** 导出全部文章 */
   exportAll(): Promise<Blob> {
     return request.download('/article/export/all')
+  },
+  /** 历史版本列表 */
+  listRevisions(id: string): Promise<ArticleRevision[]> {
+    return request.get<ArticleRevision[]>(`/article/${id}/revisions`)
+  },
+  /** 历史版本详情（含正文） */
+  getRevision(id: string, revisionId: string): Promise<ArticleRevisionDetail> {
+    return request.get<ArticleRevisionDetail>(
+      `/article/${id}/revisions/${revisionId}`,
+    )
+  },
+  /** 回溯到指定历史版本 */
+  restoreRevision(id: string, revisionId: string): Promise<Article> {
+    return request.post<Article>(`/article/${id}/revisions/${revisionId}/restore`)
   },
 }

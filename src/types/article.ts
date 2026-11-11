@@ -14,8 +14,25 @@ export interface Article {
   slug?: string
   isDeleted?: boolean
   author?: string
+  lastModifiedBy?: string
+  lastModifiedByName?: string
   created?: string | number
   modified?: string | number
+}
+
+/** 历史版本列表项（不含正文） */
+export interface ArticleRevision {
+  id: string
+  title: string
+  editorId?: string
+  editorName: string
+  created?: string | number
+}
+
+/** 历史版本详情（含正文） */
+export interface ArticleRevisionDetail extends ArticleRevision {
+  articleId: string
+  content: string
 }
 
 /** 创建文档入参 */

@@ -31,3 +31,13 @@ export function RedirectIfAuthed({ children }: { children: ReactNode }) {
   }
   return <>{children}</>
 }
+
+/** 管理员路由守卫：非管理员（editor）访问时重定向到文档页 */
+export function RequireAdmin({ children }: { children: ReactNode }) {
+  const role = useAuthStore((s) => s.user?.role)
+  // 历史账号无 role 字段，视为管理员
+  if (role === 'editor') {
+    return <Navigate to="/document" replace />
+  }
+  return <>{children}</>
+}

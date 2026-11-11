@@ -36,6 +36,7 @@ import {
 import type { UploadProps } from 'antd'
 import { categoryService } from '@/services/category.service'
 import { articleService } from '@/services/article.service'
+import { useAuthStore } from '@/store/useAuthStore'
 import type { Article, Category } from '@/types'
 import { CategoryType } from '@/types'
 import { downloadBlob } from '@/utils/download'
@@ -139,6 +140,8 @@ function toTreeData(
 
 export default function DocumentTree(props: DocumentTreeProps): ReactElement {
   const { selectedArticleId, onSelectArticle, refreshKey } = props
+  // 删除操作仅管理员可用
+  const isAdmin = useAuthStore((s) => s.user?.role !== 'editor')
 
   const [tree, setTree] = useState<Category[]>([])
   const [loading, setLoading] = useState(false)
@@ -456,7 +459,7 @@ export default function DocumentTree(props: DocumentTreeProps): ReactElement {
     }
   }
 
-  /** 文件夹右键/操作菜单 */
+  /** 文件夹右键/操作菜单（删除仅管理员可见） */
   const getFolderMenuItems = (folder: Category): MenuProps['items'] => [
     {
       key: 'rename',
@@ -473,13 +476,17 @@ export default function DocumentTree(props: DocumentTreeProps): ReactElement {
       label: '新建文档',
       onClick: () => openCreateDoc(folder._id),
     },
-    { type: 'divider' },
-    {
-      key: 'delete',
-      label: '删除',
-      danger: true,
-      onClick: () => handleDeleteFolder(folder),
-    },
+    ...(isAdmin
+      ? [
+          { type: 'divider' as const },
+          {
+            key: 'delete',
+            label: '删除',
+            danger: true,
+            onClick: () => handleDeleteFolder(folder),
+          },
+        ]
+      : []),
   ]
 
   /** 自定义树节点标题：

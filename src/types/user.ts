@@ -15,9 +15,32 @@ export interface UserProfile {
   username: string
   mail: string
   avatar: string
+  role?: string
   createdTime?: string | number
   lastLoginTime?: string | number
   lastLoginIp?: string
+}
+
+/** 用户管理列表项 */
+export interface AdminUserItem {
+  id: string
+  username: string
+  name: string
+  mail?: string
+  avatar?: string
+  role: string
+  createdTime?: string
+  lastLoginTime?: string | number
+  lastLoginIp?: string
+}
+
+/** 管理员创建用户入参 */
+export interface CreateUserParams {
+  username: string
+  password: string
+  name?: string
+  mail?: string
+  role?: string
 }
 
 /** 用户资料更新入参（字段均可选，留空表示不修改） */
@@ -37,6 +60,7 @@ export interface LoginResult {
   mail: string
   avatar: string
   id: string
+  role?: string
 }
 
 /** 初始化引导入参 */

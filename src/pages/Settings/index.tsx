@@ -19,30 +19,260 @@ import {
   Spin,
   message,
   Popconfirm,
+  Table,
+  Modal,
+  Tag,
 } from 'antd'
-import { RedoOutlined, SaveOutlined } from '@ant-design/icons'
+import {
+  RedoOutlined,
+  SaveOutlined,
+  PlusOutlined,
+  KeyOutlined,
+} from '@ant-design/icons'
 import { configService } from '@/services/config.service'
 import { userService } from '@/services/user.service'
 import { useAuthStore } from '@/store/useAuthStore'
-import type { SiteConfig, UserProfile, ConfigKey } from '@/types'
+import type {
+  AdminUserItem,
+  CreateUserParams,
+  SiteConfig,
+  UserProfile,
+  ConfigKey,
+} from '@/types'
 import { formatTime } from '@/utils/format'
 
 /** URL 校验规则 */
 const urlRule = { type: 'url' as const, message: '请输入合法的 URL' }
 
 export default function Settings() {
+  const role = useAuthStore((s) => s.user?.role)
+  const isAdmin = role !== 'editor'
+  const items = [
+    { key: 'site', label: '站点配置', children: <SiteConfigPanel /> },
+    { key: 'profile', label: '个人信息', children: <ProfilePanel /> },
+  ]
+  if (isAdmin) {
+    items.push({ key: 'users', label: '用户管理', children: <UserManagePanel /> })
+  }
   return (
     <div style={{ padding: 24 }}>
       <Typography.Title level={3}>设置</Typography.Title>
       <Card>
-        <Tabs
-          items={[
-            { key: 'site', label: '站点配置', children: <SiteConfigPanel /> },
-            { key: 'profile', label: '个人信息', children: <ProfilePanel /> },
-          ]}
-        />
+        <Tabs items={items} />
       </Card>
     </div>
+  )
+}
+
+/** 用户管理面板（仅管理员可见）：列表 / 新建 / 删除 / 重置密码 */
+function UserManagePanel() {
+  const [users, setUsers] = useState<AdminUserItem[]>([])
+  const [loading, setLoading] = useState(true)
+  const [createOpen, setCreateOpen] = useState(false)
+  const [creating, setCreating] = useState(false)
+  const [resetTarget, setResetTarget] = useState<AdminUserItem | null>(null)
+  const [resetting, setResetting] = useState(false)
+  const [createForm] = Form.useForm<CreateUserParams>()
+  const [resetForm] = Form.useForm<{ password: string }>()
+  const currentUserId = useAuthStore((s) => s.user?.id)
+
+  const loadUsers = useCallback(async () => {
+    setLoading(true)
+    try {
+      const list = await userService.listAll()
+      setUsers(list)
+    } catch {
+      // 拦截器已报错
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    void loadUsers()
+  }, [loadUsers])
+
+  const handleCreate = useCallback(async () => {
+    try {
+      const values = await createForm.validateFields()
+      setCreating(true)
+      await userService.createUser(values)
+      message.success('用户已创建')
+      setCreateOpen(false)
+      createForm.resetFields()
+      await loadUsers()
+    } catch {
+      // 校验失败或接口错误，拦截器已处理
+    } finally {
+      setCreating(false)
+    }
+  }, [createForm, loadUsers])
+
+  const handleDelete = useCallback(
+    async (user: AdminUserItem) => {
+      try {
+        await userService.deleteUser(user.id)
+        message.success(`已删除用户 ${user.username}`)
+        await loadUsers()
+      } catch {
+        // 拦截器已报错
+      }
+    },
+    [loadUsers],
+  )
+
+  const handleResetPassword = useCallback(async () => {
+    if (!resetTarget) return
+    try {
+      const { password } = await resetForm.validateFields()
+      setResetting(true)
+      await userService.resetPassword(resetTarget.id, password)
+      message.success(`已重置 ${resetTarget.username} 的密码`)
+      setResetTarget(null)
+      resetForm.resetFields()
+    } catch {
+      // 校验失败或接口错误，拦截器已处理
+    } finally {
+      setResetting(false)
+    }
+  }, [resetTarget, resetForm])
+
+  return (
+    <Spin spinning={loading}>
+      <div style={{ marginBottom: 16 }}>
+        <Button
+          type="primary"
+          icon={<PlusOutlined />}
+          onClick={() => setCreateOpen(true)}
+        >
+          新建用户
+        </Button>
+      </div>
+      <Table<AdminUserItem>
+        rowKey="id"
+        dataSource={users}
+        pagination={false}
+        size="middle"
+        columns={[
+          { title: '用户名', dataIndex: 'username' },
+          { title: '昵称', dataIndex: 'name' },
+          {
+            title: '角色',
+            dataIndex: 'role',
+            render: (role: string) =>
+              role === 'admin' ? (
+                <Tag color="gold">管理员</Tag>
+              ) : (
+                <Tag>协作者</Tag>
+              ),
+          },
+          {
+            title: '最近登录',
+            dataIndex: 'lastLoginTime',
+            render: (v: AdminUserItem['lastLoginTime']) => formatTime(v),
+          },
+          {
+            title: '操作',
+            key: 'actions',
+            width: 220,
+            render: (_, record) => (
+              <Space size={4}>
+                <Button
+                  size="small"
+                  type="link"
+                  icon={<KeyOutlined />}
+                  onClick={() => setResetTarget(record)}
+                >
+                  重置密码
+                </Button>
+                {record.id !== currentUserId ? (
+                  <Popconfirm
+                    title={`确认删除用户 ${record.username}？`}
+                    okText="删除"
+                    cancelText="取消"
+                    onConfirm={() => void handleDelete(record)}
+                  >
+                    <Button size="small" type="link" danger>
+                      删除
+                    </Button>
+                  </Popconfirm>
+                ) : (
+                  <Tag color="blue">当前账号</Tag>
+                )}
+              </Space>
+            ),
+          },
+        ]}
+      />
+
+      {/* 新建用户 */}
+      <Modal
+        title="新建用户"
+        open={createOpen}
+        onOk={() => void handleCreate()}
+        onCancel={() => setCreateOpen(false)}
+        confirmLoading={creating}
+        okText="创建"
+        cancelText="取消"
+        destroyOnHidden
+      >
+        <Form form={createForm} layout="vertical" preserve={false}>
+          <Form.Item
+            label="用户名"
+            name="username"
+            rules={[{ required: true, message: '请输入用户名' }]}
+          >
+            <Input placeholder="登录用户名" autoComplete="off" />
+          </Form.Item>
+          <Form.Item label="昵称" name="name">
+            <Input placeholder="展示名称，默认同用户名" />
+          </Form.Item>
+          <Form.Item
+            label="密码"
+            name="password"
+            rules={[
+              { required: true, message: '请输入密码' },
+              { min: 6, message: '密码至少 6 位' },
+            ]}
+          >
+            <Input.Password placeholder="至少 6 位" autoComplete="new-password" />
+          </Form.Item>
+          <Form.Item label="角色" name="role" initialValue="editor">
+            <Select
+              options={[
+                { value: 'editor', label: '协作者（可编辑文档）' },
+                { value: 'admin', label: '管理员（可管理用户）' },
+              ]}
+            />
+          </Form.Item>
+        </Form>
+      </Modal>
+
+      {/* 重置密码 */}
+      <Modal
+        title={`重置密码：${resetTarget?.username ?? ''}`}
+        open={!!resetTarget}
+        onOk={() => void handleResetPassword()}
+        onCancel={() => setResetTarget(null)}
+        confirmLoading={resetting}
+        okText="重置"
+        cancelText="取消"
+        destroyOnHidden
+      >
+        <Form form={resetForm} layout="vertical" preserve={false}>
+          <Form.Item
+            label="新密码"
+            name="password"
+            rules={[
+              { required: true, message: '请输入新密码' },
+              { min: 6, message: '密码至少 6 位' },
+            ]}
+          >
+            <Input.Password placeholder="至少 6 位" autoComplete="new-password" />
+          </Form.Item>
+        </Form>
+      </Modal>
+    </Spin>
   )
 }
 

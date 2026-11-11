@@ -16,7 +16,7 @@ import Logs from '@/pages/Loglist'
 import Settings from '@/pages/Settings'
 import NotFound from '@/pages/NotFound'
 import Share from '@/pages/Share'
-import { RequireAuth, RedirectIfAuthed } from './guards'
+import { RequireAuth, RedirectIfAuthed, RequireAdmin } from './guards'
 
 export const routes: RouteObject[] = [
   {
@@ -40,9 +40,23 @@ export const routes: RouteObject[] = [
       { index: true, element: <Navigate to="/document" replace /> },
       { path: 'document', element: <Document /> },
       { path: 'analyze', element: <Analyze /> },
-      { path: 'backup', element: <Backup /> },
+      {
+        path: 'backup',
+        element: (
+          <RequireAdmin>
+            <Backup />
+          </RequireAdmin>
+        ),
+      },
       { path: 'logs', element: <Logs /> },
-      { path: 'settings', element: <Settings /> },
+      {
+        path: 'settings',
+        element: (
+          <RequireAdmin>
+            <Settings />
+          </RequireAdmin>
+        ),
+      },
     ],
   },
   { path: '*', element: <NotFound /> },
