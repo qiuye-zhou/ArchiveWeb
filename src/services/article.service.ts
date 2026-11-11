@@ -38,6 +38,14 @@ export const articleService = {
   remove(id: string): Promise<void> {
     return request.del<void>(`/article/${id}`)
   },
+  /** 回收站列表（软删除的文档） */
+  listRecycle(params: { page?: number; pageSize?: number }): Promise<Paginated<Article>> {
+    return request.get<Paginated<Article>>('/article/recycle', params)
+  },
+  /** 从回收站恢复文档 */
+  restore(id: string): Promise<void> {
+    return request.patch<void>(`/article/${id}/restore`)
+  },
   /** 永久删除文章 */
   removePermanent(id: string): Promise<void> {
     return request.del<void>(`/article/${id}/permanent`)

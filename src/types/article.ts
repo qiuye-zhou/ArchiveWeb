@@ -16,6 +16,12 @@ export interface Article {
   author?: string
   lastModifiedBy?: string
   lastModifiedByName?: string
+  /** 移入回收站时间 */
+  deletedAt?: string | number
+  /** 删除操作人用户 id */
+  deletedBy?: string
+  /** 删除操作人显示名 */
+  deletedByName?: string
   created?: string | number
   modified?: string | number
 }

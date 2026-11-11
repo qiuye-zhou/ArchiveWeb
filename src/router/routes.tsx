@@ -13,6 +13,7 @@ import Document from '@/pages/Document'
 import Analyze from '@/pages/Analyze'
 import Backup from '@/pages/Backup'
 import Logs from '@/pages/Loglist'
+import Recycle from '@/pages/Recycle'
 import Settings from '@/pages/Settings'
 import NotFound from '@/pages/NotFound'
 import Share from '@/pages/Share'
@@ -49,6 +50,14 @@ export const routes: RouteObject[] = [
         ),
       },
       { path: 'logs', element: <Logs /> },
+      {
+        path: 'recycle',
+        element: (
+          <RequireAdmin>
+            <Recycle />
+          </RequireAdmin>
+        ),
+      },
       {
         path: 'settings',
         element: (

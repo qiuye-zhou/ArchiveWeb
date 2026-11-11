@@ -10,6 +10,7 @@ import { useAuthStore } from '@/store/useAuthStore'
 /** 顶部导航项配置；adminOnly 的项仅管理员可见 */
 const NAV_CONFIG: Array<{ key: string; label: string; adminOnly?: boolean }> = [
   { key: '/document', label: '文档' },
+  { key: '/recycle', label: '回收站', adminOnly: true },
   { key: '/analyze', label: '数据分析' },
   { key: '/backup', label: '备份', adminOnly: true },
   { key: '/logs', label: '日志' },
