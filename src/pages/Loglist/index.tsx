@@ -4,7 +4,7 @@
  * - 点击「查看」按钮弹 Modal 显示完整日志内容（等宽字体、可滚动、限高）
  * - 顶部：刷新列表 / 删除全部日志
  */
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   Typography,
   Card,
@@ -28,7 +28,7 @@ import {
 import { healthService } from '@/services/health.service'
 import { useAuthStore } from '@/store/useAuthStore'
 import type { LogFile, LogContent } from '@/types'
-import { formatFileSize, formatTime } from '@/utils/format'
+import { formatFileSize, formatLogContent, formatTime } from '@/utils/format'
 import Empty from '@/components/common/Empty'
 
 /** 判断字符串是否是已经带单位的预格式化大小（如 "5.24 KB"），避免再走 formatFileSize 被 NaN */
@@ -199,6 +199,12 @@ export default function Logs() {
     },
   ]
 
+  /** 后端存的是单行紧凑格式，展示时展开成易读的多行 */
+  const displayContent = useMemo(
+    () => formatLogContent(modalData?.content),
+    [modalData?.content],
+  )
+
   return (
     <div style={{ padding: 24 }}>
       <Typography.Title level={3}>日志查看</Typography.Title>
@@ -318,7 +324,7 @@ export default function Logs() {
               wordBreak: 'break-all',
             }}
           >
-            {modalData?.content || '(空)'}
+            {displayContent || '(空)'}
           </pre>
         </Spin>
       </Modal>

@@ -75,3 +75,51 @@ export function countWords(text?: string | null): number {
   // 去除所有空白后统计字符数（中英文混排时每个非空白字符算 1 字）
   return cleaned.replace(/\s/g, '').length
 }
+
+/** 日志行首部：2026-11-11 12:02:01 [info] {...} */
+const LOG_LINE_PATTERN =
+  /^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\s+\[(\w+)\]\s+(\{.*)$/
+
+/**
+ * 把后端单行紧凑日志展开成易读的多行格式
+ * 输入：2026-11-11 12:02:01 [info] {"type":"route","message":"route","ctx":{...}}
+ * 输出：
+ *   2026-11-11 12:02:01 [info] route - route
+ *     {
+ *       "ctx": { ... }
+ *     }
+ * 无法解析的行（旧的缩进格式、纯文本）原样返回。
+ */
+export function formatLogContent(text?: string | null): string {
+  if (!text) return ''
+  return text
+    .split('\n')
+    .map((line) => {
+      // Windows 下日志是 CRLF，行尾的 \r 会让 `.` 无法匹配到结尾，先剥掉
+      const clean = line.endsWith('\r') ? line.slice(0, -1) : line
+      const matched = clean.match(LOG_LINE_PATTERN)
+      if (!matched) return line
+      const [, time, level, json] = matched
+      try {
+        const data = JSON.parse(json) as Record<string, unknown>
+        const { type, message, ...rest } = data
+        const headParts = [time, `[${level}]`]
+        if (type) headParts.push(String(type))
+        if (typeof message === 'string' && message !== type) {
+          headParts.push(`- ${message}`)
+        }
+        const head = headParts.join(' ')
+
+        const restKeys = Object.keys(rest)
+        if (!restKeys.length) return head
+        const detail = JSON.stringify(rest, null, 2)
+          .split('\n')
+          .map((l) => `  ${l}`)
+          .join('\n')
+        return `${head}\n${detail}`
+      } catch {
+        return line
+      }
+    })
+    .join('\n')
+}
