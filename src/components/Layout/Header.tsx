@@ -6,6 +6,7 @@ import { Layout, Menu, Dropdown, Avatar, Space, type MenuProps } from 'antd'
 import { UserOutlined, LogoutOutlined, SettingOutlined } from '@ant-design/icons'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuthStore } from '@/store/useAuthStore'
+import Logo from '@/components/common/Logo'
 
 /** 顶部导航项配置；adminOnly 的项仅管理员可见 */
 const NAV_CONFIG: Array<{ key: string; label: string; adminOnly?: boolean }> = [
@@ -66,15 +67,10 @@ export default function Header() {
   return (
     <Layout.Header style={{ display: 'flex', alignItems: 'center', padding: '0 24px' }}>
       <div
-        style={{
-          color: '#fff',
-          fontWeight: 700,
-          fontSize: 18,
-          marginRight: 32,
-          whiteSpace: 'nowrap',
-        }}
+        onClick={() => navigate('/document')}
+        style={{ marginRight: 32, cursor: 'pointer' }}
       >
-        ArchiveDoc
+        <Logo size={30} variant="dark" />
       </div>
       <Menu
         theme="dark"
