@@ -68,7 +68,12 @@ export default function Header() {
     <Layout.Header style={{ display: 'flex', alignItems: 'center', padding: '0 24px' }}>
       <div
         onClick={() => navigate('/document')}
-        style={{ marginRight: 32, cursor: 'pointer' }}
+        style={{
+          marginRight: 32,
+          cursor: 'pointer',
+          display: 'flex',
+          alignItems: 'center',
+        }}
       >
         <Logo size={30} variant="dark" />
       </div>
