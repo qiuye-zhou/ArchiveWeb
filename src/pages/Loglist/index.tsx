@@ -54,7 +54,7 @@ const LOG_VIEW_HEIGHT = 560
  * - 直接把几十万字符塞进一个 <pre> 会让浏览器排版/绘制明显卡顿
  * - 每行固定高度、不自动换行（超长行横向滚动），保证行高计算准确
  */
-function VirtualLogPreview({ text }: { text: string }) {
+function VirtualLogPreview({ text, height = LOG_VIEW_HEIGHT }: { text: string; height?: number }) {
   const lines = useMemo(() => (text ? text.split('\n') : []), [text])
   const [scrollTop, setScrollTop] = useState(0)
   const outerRef = useRef<HTMLDivElement | null>(null)
@@ -74,7 +74,7 @@ function VirtualLogPreview({ text }: { text: string }) {
   }
 
   const overscan = 10
-  const visibleCount = Math.ceil(LOG_VIEW_HEIGHT / LOG_LINE_HEIGHT)
+  const visibleCount = Math.ceil(height / LOG_LINE_HEIGHT)
   const start = Math.max(0, Math.floor(scrollTop / LOG_LINE_HEIGHT) - overscan)
   const end = Math.min(lines.length, start + visibleCount + overscan * 2)
   const slice = lines.slice(start, end).join('\n')
@@ -84,7 +84,7 @@ function VirtualLogPreview({ text }: { text: string }) {
       ref={outerRef}
       onScroll={handleScroll}
       style={{
-        height: LOG_VIEW_HEIGHT,
+        height,
         overflow: 'auto',
         background: '#f5f5f5',
         borderRadius: 6,
@@ -128,6 +128,17 @@ export default function Logs() {
   const [modalLoading, setModalLoading] = useState<boolean>(false)
   // 只展示末尾 N 行，防止超大日志渲染卡死
   const [tailLines, setTailLines] = useState<number>(1000)
+  // 预览区高度随窗口自适应，避免弹窗过高把页面撑出滚动条
+  const [previewHeight, setPreviewHeight] = useState<number>(420)
+  useEffect(() => {
+    if (!modalOpen) return
+    const calc = () => {
+      setPreviewHeight(Math.max(300, Math.min(680, window.innerHeight - 280)))
+    }
+    calc()
+    window.addEventListener('resize', calc)
+    return () => window.removeEventListener('resize', calc)
+  }, [modalOpen])
 
   /** 拉取日志列表 */
   const fetchList = useCallback(async () => {
@@ -346,6 +357,7 @@ export default function Logs() {
           </Button>,
         ]}
         width={960}
+        centered
         destroyOnHidden
       >
         <Space style={{ marginBottom: 12 }} size={8} wrap>
@@ -380,7 +392,7 @@ export default function Logs() {
         ) : null}
 
         <Spin spinning={modalLoading}>
-          <VirtualLogPreview text={displayContent || '(空)'} />
+          <VirtualLogPreview text={displayContent || '(空)'} height={previewHeight} />
         </Spin>
       </Modal>
 
