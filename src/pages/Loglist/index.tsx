@@ -4,7 +4,8 @@
  * - 点击「查看」按钮弹 Modal 显示完整日志内容（等宽字体、可滚动、限高）
  * - 顶部：刷新列表 / 删除全部日志
  */
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import type { UIEvent } from 'react'
 import {
   Typography,
   Card,
@@ -38,10 +39,81 @@ function isFormattedSize(v: unknown): v is string {
 
 /** 可供选择的「显示最后 N 行」 */
 const TAIL_OPTIONS = [
+  { value: 500, label: '最后 500 行' },
   { value: 1000, label: '最后 1000 行' },
   { value: 2000, label: '最后 2000 行' },
-  { value: 5000, label: '最后 5000 行' },
 ]
+
+/** 日志行高（12px 字体 * 1.6 行高取整），虚拟滚动按此计算位置 */
+const LOG_LINE_HEIGHT = 19
+/** 日志可视区高度 */
+const LOG_VIEW_HEIGHT = 560
+
+/**
+ * 大日志虚拟滚动预览：只渲染可视区域附近的行
+ * - 直接把几十万字符塞进一个 <pre> 会让浏览器排版/绘制明显卡顿
+ * - 每行固定高度、不自动换行（超长行横向滚动），保证行高计算准确
+ */
+function VirtualLogPreview({ text }: { text: string }) {
+  const lines = useMemo(() => (text ? text.split('\n') : []), [text])
+  const [scrollTop, setScrollTop] = useState(0)
+  const outerRef = useRef<HTMLDivElement | null>(null)
+  const frameRef = useRef(0)
+
+  // 内容变化时回到顶部
+  useEffect(() => {
+    setScrollTop(0)
+    if (outerRef.current) outerRef.current.scrollTop = 0
+  }, [text])
+
+  // 滚动按帧节流，避免高频 setState
+  const handleScroll = (e: UIEvent<HTMLDivElement>) => {
+    const top = e.currentTarget.scrollTop
+    cancelAnimationFrame(frameRef.current)
+    frameRef.current = requestAnimationFrame(() => setScrollTop(top))
+  }
+
+  const overscan = 10
+  const visibleCount = Math.ceil(LOG_VIEW_HEIGHT / LOG_LINE_HEIGHT)
+  const start = Math.max(0, Math.floor(scrollTop / LOG_LINE_HEIGHT) - overscan)
+  const end = Math.min(lines.length, start + visibleCount + overscan * 2)
+  const slice = lines.slice(start, end).join('\n')
+
+  return (
+    <div
+      ref={outerRef}
+      onScroll={handleScroll}
+      style={{
+        height: LOG_VIEW_HEIGHT,
+        overflow: 'auto',
+        background: '#f5f5f5',
+        borderRadius: 6,
+        fontFamily:
+          'ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace',
+        fontSize: 12,
+      }}
+    >
+      <div style={{ height: lines.length * LOG_LINE_HEIGHT, position: 'relative' }}>
+        <pre
+          style={{
+            position: 'absolute',
+            top: start * LOG_LINE_HEIGHT,
+            left: 0,
+            right: 0,
+            margin: 0,
+            padding: '0 12px',
+            fontFamily: 'inherit',
+            fontSize: 'inherit',
+            lineHeight: `${LOG_LINE_HEIGHT}px`,
+            whiteSpace: 'pre',
+          }}
+        >
+          {slice}
+        </pre>
+      </div>
+    </div>
+  )
+}
 
 export default function Logs() {
   const [list, setList] = useState<LogFile[]>([])
@@ -55,7 +127,7 @@ export default function Logs() {
   const [modalData, setModalData] = useState<LogContent | null>(null)
   const [modalLoading, setModalLoading] = useState<boolean>(false)
   // 只展示末尾 N 行，防止超大日志渲染卡死
-  const [tailLines, setTailLines] = useState<number>(2000)
+  const [tailLines, setTailLines] = useState<number>(1000)
 
   /** 拉取日志列表 */
   const fetchList = useCallback(async () => {
@@ -308,24 +380,7 @@ export default function Logs() {
         ) : null}
 
         <Spin spinning={modalLoading}>
-          <pre
-            style={{
-              margin: 0,
-              maxHeight: 560,
-              overflow: 'auto',
-              background: '#f5f5f5',
-              padding: 12,
-              borderRadius: 6,
-              fontFamily:
-                'ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace',
-              fontSize: 12,
-              lineHeight: 1.6,
-              whiteSpace: 'pre-wrap',
-              wordBreak: 'break-all',
-            }}
-          >
-            {displayContent || '(空)'}
-          </pre>
+          <VirtualLogPreview text={displayContent || '(空)'} />
         </Spin>
       </Modal>
 
