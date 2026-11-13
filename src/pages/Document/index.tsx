@@ -21,6 +21,7 @@ import {
 } from '@ant-design/icons'
 import DocumentTree from '@/components/DocumentTree'
 import MilkdownEditor from '@/components/MilkdownEditor'
+import DocumentOutline from '@/components/DocumentOutline'
 import { articleService } from '@/services/article.service'
 import { useAuthStore } from '@/store/useAuthStore'
 import type { Article, ArticleRevision, ArticleRevisionDetail } from '@/types'
@@ -53,6 +54,8 @@ export default function Document(): ReactElement {
   const [saving, setSaving] = useState(false)
   // 树刷新 key
   const [treeRefreshKey, setTreeRefreshKey] = useState(0)
+  // 编辑区滚动容器（供右侧目录定位与阅读进度）
+  const editorScrollRef = useRef<HTMLDivElement | null>(null)
   // 历史版本抽屉
   const [historyOpen, setHistoryOpen] = useState(false)
   const [revisions, setRevisions] = useState<ArticleRevision[]>([])
@@ -405,12 +408,18 @@ export default function Document(): ReactElement {
             </div>
 
             {/* 编辑器区域 */}
-            <div style={{ flex: 1, overflow: 'hidden' }}>
+            <div style={{ flex: 1, minHeight: 0, display: 'flex', gap: 16 }}>
+              <div style={{ flex: 1, minWidth: 0, overflow: 'hidden' }}>
               <MilkdownEditor
                 value={editorValue}
                 onChange={handleEditorChange}
                 readonly={!editing}
+                scrollRef={editorScrollRef}
               />
+              </div>
+              <div style={{ width: 200, flexShrink: 0 }}>
+                <DocumentOutline containerRef={editorScrollRef} />
+              </div>
             </div>
           </div>
         ) : (

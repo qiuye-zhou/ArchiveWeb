@@ -9,6 +9,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { Button, Result, Spin } from 'antd'
 import { EditOutlined } from '@ant-design/icons'
 import MilkdownEditor from '@/components/MilkdownEditor'
+import DocumentOutline from '@/components/DocumentOutline'
 import { articleService } from '@/services/article.service'
 import { useAuthStore } from '@/store/useAuthStore'
 import type { Article } from '@/types'
@@ -21,6 +22,14 @@ export default function Share(): ReactElement {
   const [article, setArticle] = useState<Article | null>(null)
   const [loading, setLoading] = useState(true)
   const [failed, setFailed] = useState(false)
+  // 窗口足够宽时在右侧显示目录；窄屏隐藏，避免挤压正文
+  const [wide, setWide] = useState(() => window.innerWidth >= 1180)
+
+  useEffect(() => {
+    const onResize = () => setWide(window.innerWidth >= 1180)
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [])
 
   useEffect(() => {
     if (!id) {
@@ -85,13 +94,22 @@ export default function Share(): ReactElement {
     <div style={{ minHeight: '100vh', background: '#f5f5f5', padding: '32px 16px' }}>
       <div
         style={{
-          maxWidth: 900,
+          maxWidth: 1180,
           margin: '0 auto',
-          background: '#fff',
-          borderRadius: 8,
-          padding: 32,
+          display: 'flex',
+          alignItems: 'flex-start',
+          gap: 24,
         }}
       >
+        <div
+          style={{
+            flex: 1,
+            minWidth: 0,
+            background: '#fff',
+            borderRadius: 8,
+            padding: 32,
+          }}
+        >
         <div
           style={{
             display: 'flex',
@@ -115,6 +133,12 @@ export default function Share(): ReactElement {
         <div style={{ margin: '20px 0 0' }}>
           <MilkdownEditor value={article.content ?? ''} onChange={() => {}} readonly hideToolbar />
         </div>
+        </div>
+        {wide ? (
+          <div style={{ width: 200, flexShrink: 0, position: 'sticky', top: 32 }}>
+            <DocumentOutline />
+          </div>
+        ) : null}
       </div>
     </div>
   )

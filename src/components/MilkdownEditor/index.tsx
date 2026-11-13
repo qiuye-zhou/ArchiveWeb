@@ -14,7 +14,7 @@
  * TODO: 后续接入后端图片上传接口，替换 uploadConfig.uploader。
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { ReactElement } from 'react'
+import type { ReactElement, RefObject } from 'react'
 import { Space, Tooltip, Button, Divider } from 'antd'
 import {
   BoldOutlined,
@@ -80,6 +80,8 @@ export interface MilkdownEditorProps {
   readonly?: boolean
   /** 是否隐藏工具栏（分享页等纯阅读场景） */
   hideToolbar?: boolean
+  /** 编辑区滚动容器引用（供右侧目录计算定位与阅读进度） */
+  scrollRef?: RefObject<HTMLDivElement | null>
 }
 
 /** 编辑器渲染模式 */
@@ -95,7 +97,7 @@ interface CommandLike<T = unknown> {
  * 通过 refs 持有最新的 value/onChange/readonly，避免重建编辑器。
  */
 function EditorCore(props: MilkdownEditorProps): ReactElement {
-  const { value, onChange, readonly, hideToolbar } = props
+  const { value, onChange, readonly, hideToolbar, scrollRef } = props
 
   // 持有最新 props 的 refs（供编辑器工厂与监听器读取，保证闭包始终拿到最新值）
   const valueRef = useRef<string>(value)
@@ -296,7 +298,8 @@ function EditorCore(props: MilkdownEditorProps): ReactElement {
           后续输入会落到按钮上，表现为「点了格式却打不出字」 */}
       <div
         style={{
-          display: hideToolbar ? 'none' : undefined,
+          // 只读（非编辑）状态只展示文档正文，不显示编辑工具栏
+          display: hideToolbar || readonly ? 'none' : undefined,
           padding: '8px 12px',
           borderBottom: '1px solid #f0f0f0',
           background: '#fafafa',
@@ -457,7 +460,7 @@ function EditorCore(props: MilkdownEditorProps): ReactElement {
       </div>
 
       {/* 编辑区：源码模式显示 textarea；Milkdown 始终挂载、仅隐藏，避免销毁编辑器导致 editorView 丢失 */}
-      <div style={{ flex: 1, overflow: 'auto', padding: '0 12px' }}>
+      <div ref={scrollRef} style={{ flex: 1, overflow: 'auto', padding: '0 12px' }}>
         {mode === 'source' ? (
           <textarea
             value={value}
