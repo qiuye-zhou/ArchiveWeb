@@ -15,7 +15,6 @@ export default function Logo({ size = 32, variant = 'dark' }: LogoProps) {
   return (
     <span
       style={{
-        // 用 flex 而非 inline-flex：避免行内基线对齐在下方留出降部空隙，导致整体偏上
         display: 'flex',
         alignItems: 'center',
         gap: 10,

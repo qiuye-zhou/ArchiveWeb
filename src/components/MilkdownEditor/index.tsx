@@ -1,11 +1,11 @@
-﻿/**
+/**
  * Milkdown 富文本编辑器组件
  * - 基于 @milkdown/react 的 MilkdownProvider + useEditor
  * - 集成 commonmark / gfm / history / clipboard / emoji / prism / listener / upload / block 插件
  * - 通过 listener 插件监听 markdown 变化并回调 onChange
  * - 外部 value 变化时通过 replaceAll 同步到编辑器（避免循环更新）
  * - 工具栏：撤销/重做/正文/标题/粗体/斜体/删除线/行内代码/引用/列表/代码块/链接/图片 + 源码切换
- * - 所见即所得：编辑区本身就是最终排版效果，无需额外预览模式
+ * - 文档：编辑区本身就是最终排版效果，无需额外预览模式
  *
  * 说明：Milkdown v7 的 useEditor 返回 { loading, get }，get() 取 Editor 实例。
  * 命令通过 $Command.run(payload) 触发（插件加载后该方法被注入）；
@@ -33,7 +33,14 @@ import {
   EditOutlined,
 } from '@ant-design/icons'
 import { Milkdown, MilkdownProvider, useEditor } from '@milkdown/react'
-import { Editor, editorViewOptionsCtx, defaultValueCtx, rootCtx, editorViewCtx } from '@milkdown/core'
+import {
+  Editor,
+  EditorStatus,
+  editorViewOptionsCtx,
+  defaultValueCtx,
+  rootCtx,
+  editorViewCtx,
+} from '@milkdown/core'
 import {
   commonmark,
   toggleStrongCommand,
@@ -96,7 +103,7 @@ function EditorCore(props: MilkdownEditorProps): ReactElement {
   const readonlyRef = useRef<boolean>(!!readonly)
   // 内部 markdown 缓存，用于判断外部 value 是否与编辑器一致以避免循环更新
   const internalRef = useRef<string>(value)
-  // 源码/所见即所得切换
+  // 源码/文档切换
   const [mode, setMode] = useState<EditMode>('wysiwyg')
 
   useEffect(() => {
@@ -153,7 +160,8 @@ function EditorCore(props: MilkdownEditorProps): ReactElement {
   // 外部 value 变化时同步到编辑器（仅当与内部不一致时，防止循环）
   useEffect(() => {
     const editor = get()
-    if (!editor) return
+    // 编辑器尚未创建完成时 ctx 里还没有 editorView，直接操作会抛「Context "editorView" not found」
+    if (!editor || editor.status !== EditorStatus.Created) return
     if (value === internalRef.current) return
     internalRef.current = value
     editor.action(replaceAll(value))
@@ -164,12 +172,33 @@ function EditorCore(props: MilkdownEditorProps): ReactElement {
   // 仅改 ref 不会同步 contenteditable，会出现「按钮已可点但正文仍无法输入」。
   useEffect(() => {
     const editor = get()
-    if (!editor) return
+    if (!editor || editor.status !== EditorStatus.Created) return
     editor.action((ctx) => {
       ctx.get(editorViewCtx).setProps({ editable: () => !readonly })
     })
     readonlyRef.current = !!readonly
   }, [readonly, get, loading])
+
+  /**
+   * 切换源码 / 文档
+   * - 切回文档时，把源码编辑的最新内容写回编辑器
+   * - 不要卸载 <Milkdown />：卸载会销毁编辑器，而 useEditor 的 get() 仍持有已销毁实例，
+   *   再次操作就会抛「Context "editorView" not found」
+   */
+  const handleToggleMode = useCallback(() => {
+    setMode((current) => {
+      if (current === 'source') {
+        const editor = get()
+        if (editor && editor.status === EditorStatus.Created) {
+          const latest = valueRef.current
+          internalRef.current = latest
+          editor.action(replaceAll(latest))
+        }
+        return 'wysiwyg'
+      }
+      return 'source'
+    })
+  }, [get])
 
   /** 触发无参命令 */
   const callSimple = useCallback(
@@ -215,7 +244,7 @@ function EditorCore(props: MilkdownEditorProps): ReactElement {
     (kind: 'bullet' | 'ordered') => {
       if (btnDisabled) return
       const editor = get()
-      if (!editor) return
+      if (!editor || editor.status !== EditorStatus.Created) return
 
       let inList = false
       let sameType = false
@@ -415,26 +444,29 @@ function EditorCore(props: MilkdownEditorProps): ReactElement {
             />
           </Tooltip>
           <Divider type="vertical" style={{ margin: '0 4px' }} />
-          <Tooltip title={mode === 'wysiwyg' ? '切换到源码模式' : '切换到所见即所得'}>
+          <Tooltip title={mode === 'wysiwyg' ? '切换到源码模式' : '切换到文档'}>
             <Button
               size="small"
               type="text"
               icon={mode === 'wysiwyg' ? <EditOutlined /> : <EyeOutlined />}
               disabled={loading}
-              onClick={() => setMode((m) => (m === 'wysiwyg' ? 'source' : 'wysiwyg'))}
+              onClick={handleToggleMode}
             />
           </Tooltip>
         </Space>
       </div>
 
-      {/* 编辑区：源码模式渲染 textarea，否则渲染 Milkdown */}
+      {/* 编辑区：源码模式显示 textarea；Milkdown 始终挂载、仅隐藏，避免销毁编辑器导致 editorView 丢失 */}
       <div style={{ flex: 1, overflow: 'auto', padding: '0 12px' }}>
         {mode === 'source' ? (
           <textarea
             value={value}
             onChange={(e) => {
-              internalRef.current = e.target.value
-              onChange(e.target.value)
+              const next = e.target.value
+              // 同步内部缓存与最新值，避免切换回文档时被旧值覆盖
+              internalRef.current = next
+              valueRef.current = next
+              onChange(next)
             }}
             disabled={readonly}
             style={{
@@ -449,11 +481,13 @@ function EditorCore(props: MilkdownEditorProps): ReactElement {
               outline: 'none',
             }}
           />
-        ) : (
-          <div className="milkdown-editor-wrap" style={{ minHeight: 460 }}>
-            <Milkdown />
-          </div>
-        )}
+        ) : null}
+        <div
+          className="milkdown-editor-wrap"
+          style={{ minHeight: 460, display: mode === 'source' ? 'none' : undefined }}
+        >
+          <Milkdown />
+        </div>
       </div>
     </div>
   )
@@ -469,4 +503,3 @@ export default function MilkdownEditor(props: MilkdownEditorProps): ReactElement
     </MilkdownProvider>
   )
 }
-
