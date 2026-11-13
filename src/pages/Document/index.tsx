@@ -331,7 +331,7 @@ export default function Document(): ReactElement {
           refreshKey={treeRefreshKey}
         />
       </Sider>
-      <Content style={{ padding: 16, overflow: 'auto', background: '#f5f5f5' }}>
+      <Content style={{ padding: 0, overflow: 'auto', background: '#f5f5f5' }}>
         {loadingArticle ? (
           <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
             <Spin tip="加载文档中..." size="large" />
