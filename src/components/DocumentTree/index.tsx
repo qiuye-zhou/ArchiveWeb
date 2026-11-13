@@ -594,7 +594,19 @@ export default function DocumentTree(props: DocumentTreeProps): ReactElement {
               导入MD
             </Button>
           </Upload>
-          <Button size="small" icon={<ExportOutlined />} onClick={handleExportAll}>
+          <Button
+            size="small"
+            icon={<ExportOutlined />}
+            onClick={() =>
+              Modal.confirm({
+                title: '导出全部文档',
+                content: '将把系统内所有文档打包为 zip 下载，是否继续？',
+                okText: '导出',
+                cancelText: '取消',
+                onOk: handleExportAll,
+              })
+            }
+          >
             导出全部
           </Button>
           <Button
