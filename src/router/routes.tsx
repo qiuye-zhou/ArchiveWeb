@@ -17,6 +17,7 @@ import Recycle from '@/pages/Recycle'
 import Settings from '@/pages/Settings'
 import NotFound from '@/pages/NotFound'
 import Share from '@/pages/Share'
+import NetworkError from '@/pages/NetworkError'
 import { RequireAuth, RedirectIfAuthed, RequireAdmin } from './guards'
 
 export const routes: RouteObject[] = [
@@ -30,6 +31,7 @@ export const routes: RouteObject[] = [
   },
   { path: '/init', element: <Init /> },
   { path: '/share/:id', element: <Share /> },
+  { path: '/network-error', element: <NetworkError /> },
   {
     path: '/',
     element: (

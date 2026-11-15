@@ -12,6 +12,9 @@ import { message } from 'antd'
 import type { ApiResponse } from '@/types'
 import { useAuthStore } from '@/store/useAuthStore'
 
+/** 网络错误信息持久化 key（跨刷新保留，刷新后错误页可直接展示） */
+const NETWORK_ERROR_KEY = 'archive-web-network-error'
+
 const service = axios.create({
   baseURL: '/api',
   timeout: 30000,
@@ -32,6 +35,8 @@ service.interceptors.request.use(
 // 响应拦截：统一解包与错误处理
 service.interceptors.response.use(
   (response) => {
+    // 任意成功响应都说明网络已恢复，清除错误标记
+    sessionStorage.removeItem(NETWORK_ERROR_KEY)
     const data = response.data
     // 后端统一包装 { code, message, data }
     if (data && typeof data === 'object' && !(data instanceof Blob) && 'code' in data) {
@@ -57,7 +62,25 @@ service.interceptors.response.use(
       }
       return Promise.reject(error)
     }
-    const msg = error?.response?.data?.message || error?.message || '网络错误'
+    // 没有 response（网络不通 / 超时 / DNS 失败）或网关错误（502/503/504）
+    // 都视为后端不可达，硬跳转到独立的网络错误页（避免 overlay 闪烁）
+    if (!error?.response || status === 502 || status === 503 || status === 504) {
+      const msg =
+        error?.response?.statusText || error?.message || '无法连接到服务器'
+      if (typeof window !== 'undefined' && window.location.pathname !== '/network-error') {
+        try {
+          sessionStorage.setItem(
+            NETWORK_ERROR_KEY,
+            JSON.stringify({ message: msg, from: window.location.pathname + window.location.search }),
+          )
+        } catch {
+          /* ignore */
+        }
+        window.location.href = '/network-error'
+      }
+      return Promise.reject(error)
+    }
+    const msg = error?.response?.data?.message || error?.message || '请求失败'
     message.error(msg)
     return Promise.reject(error)
   },
