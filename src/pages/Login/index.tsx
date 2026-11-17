@@ -2,10 +2,10 @@
  * 登录页
  * - 提交调用 store.login，成功跳 /
  * - 进入时检查系统是否已初始化，未初始化跳 /init
- * - 默认填充占位账号 admin/admin 仅为方便
+ * - 勾选「记住密码」时把账号密码保存在本地，下次自动填充
  */
-import { useEffect } from 'react'
-import { Card, Form, Input, Button, message, Typography } from 'antd'
+import { useEffect, useMemo } from 'react'
+import { Card, Form, Input, Button, message, Typography, Checkbox } from 'antd'
 import { UserOutlined, LockOutlined } from '@ant-design/icons'
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuthStore } from '@/store/useAuthStore'
@@ -14,6 +14,42 @@ import { initService } from '@/services/init.service'
 interface LoginFormValues {
   username: string
   password: string
+  remember?: boolean
+}
+
+/** 记住密码的本地存储 key */
+const REMEMBER_KEY = 'archive-web-login-remember'
+
+/** 读取本地记住的账号密码（base64 编码，避免明文直接暴露在 localStorage） */
+function readRemembered(): { username: string; password: string } | null {
+  try {
+    const raw = localStorage.getItem(REMEMBER_KEY)
+    if (!raw) return null
+    const parsed = JSON.parse(decodeURIComponent(atob(raw))) as {
+      username?: string
+      password?: string
+    }
+    if (!parsed?.username || !parsed?.password) return null
+    return { username: parsed.username, password: parsed.password }
+  } catch {
+    return null
+  }
+}
+
+/** 保存/清除记住的账号密码 */
+function writeRemembered(values: { username: string; password: string } | null) {
+  try {
+    if (!values) {
+      localStorage.removeItem(REMEMBER_KEY)
+      return
+    }
+    localStorage.setItem(
+      REMEMBER_KEY,
+      btoa(encodeURIComponent(JSON.stringify(values))),
+    )
+  } catch {
+    /* 存储失败不影响登录 */
+  }
 }
 
 export default function Login() {
@@ -21,6 +57,8 @@ export default function Login() {
   const location = useLocation()
   const [searchParams] = useSearchParams()
   const login = useAuthStore((s) => s.login)
+  // 本地记住的账号密码，用于表单初始值
+  const remembered = useMemo(() => readRemembered(), [])
 
   // 登录成功后的跳转目标：优先 URL 的 redirect 参数，其次路由守卫记录的来源路径
   const redirect =
@@ -44,8 +82,11 @@ export default function Login() {
   }, [navigate])
 
   const onFinish = async (values: LoginFormValues) => {
+    const { remember, ...credentials } = values
     try {
-      await login(values)
+      await login(credentials)
+      // 勾选则保存，取消勾选则清除已保存的账号密码
+      writeRemembered(remember ? credentials : null)
       message.success('登录成功')
       navigate(target, { replace: true })
     } catch (e) {
@@ -70,7 +111,11 @@ export default function Login() {
         </Typography.Title>
         <Form
           name="login"
-          initialValues={{ username: 'admin', password: 'admin' }}
+          initialValues={{
+            username: remembered?.username ?? 'admin',
+            password: remembered?.password ?? 'admin',
+            remember: !!remembered,
+          }}
           onFinish={onFinish}
           size="large"
         >
@@ -83,6 +128,9 @@ export default function Login() {
               placeholder="密码"
               autoComplete="current-password"
             />
+          </Form.Item>
+          <Form.Item name="remember" valuePropName="checked">
+            <Checkbox>记住密码</Checkbox>
           </Form.Item>
           <Form.Item>
             <Button type="primary" htmlType="submit" block>
