@@ -1,11 +1,8 @@
 # ArchiveWeb
 
-在线文档系统 **ArchiveWeb** 前端，基于 React 19 + Ant Design 6 + Vite 构建，对接后端 [ArchiveCore](../ArchiveCore)。
+在线文档系统 **ArchiveWeb** 前端，基于 React 19 + Ant Design 6 + Vite 构建，对接后端 [ArchiveCore](https://github.com/qiuye-zhou/ArchiveCore)
 
-- 后端仓库（同目录）：[../ArchiveCore](../ArchiveCore) · [GitHub](https://github.com/qiuye-zhou/ArchiveCore)
-- 本项目仓库：[GitHub](https://github.com/qiuye-zhou/ArchiveWeb)
-
-> 完整系统 = 本前端（:3030）+ [ArchiveCore](../ArchiveCore) 后端（:3666）。开发环境下 `/api` 由 Vite 代理转发到后端。
+> 完整系统 = 本前端（:3030）+ [ArchiveCore](https://github.com/qiuye-zhou/ArchiveCore) 后端（:3666）。开发环境下 `/api` 由 Vite 代理转发到后端。
 
 ## 技术栈
 
@@ -73,7 +70,7 @@ src/
 
 环境要求：Node.js >= 20。
 
-先确保后端 [ArchiveCore](../ArchiveCore) 已启动（默认 http://127.0.0.1:3666），然后：
+先确保后端 ArchiveCore 已启动（默认 http://127.0.0.1:3666），然后：
 
 ```bash
 pnpm install
@@ -129,5 +126,3 @@ server: {
 | `/backup` | 备份管理 | 管理员 |
 | `/recycle` | 回收站 | 管理员 |
 | `/settings` | 设置 / 用户管理 | 管理员 |
-
-后端接口、数据模型与部署说明见 [ArchiveCore README](../ArchiveCore/README.md)。
